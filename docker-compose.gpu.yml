@@ -1,0 +1,45 @@
+# =============================================================================
+# Override：本地 GPU profile（vLLM 跑 Llama-Guard-4-12B）
+# 叠加在 docker-compose.yml 之上：
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+#
+# 前置条件：
+#   1. 宿主机有 NVIDIA GPU + 驱动
+#   2. 已安装 NVIDIA Container Toolkit
+#   3. 已下载模型到 ./models/Llama-Guard-4-12B（或改 VLLM_MODEL_PATH 指向 AWQ 量化版）
+#   4. .env 设置 INFERENCE_PROFILE=local-gpu
+# =============================================================================
+services:
+  # 启动本地 vLLM 服务
+  vllm:
+    build:
+      context: ./inference/vllm
+    image: contentshield-vllm:latest
+    container_name: cs-vllm
+    restart: unless-stopped
+    environment:
+      - MODEL_PATH=${VLLM_MODEL_PATH:-/models/Llama-Guard-4-12B}
+      - MODEL_NAME=${VLLM_MODEL:-llama-guard-4}
+      - GPU_MEM_UTIL=${VLLM_GPU_MEMORY_UTILIZATION:-0.90}
+      - MAX_MODEL_LEN=${VLLM_MAX_MODEL_LEN:-8192}
+      - API_KEY=${VLLM_API_KEY:-not-needed}
+      - PORT=8000
+    volumes:
+      - ./models:/models:ro
+      - ${HOME}/.cache/huggingface:/root/.cache/huggingface
+    ports:
+      - "8001:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - cs-net
+
+  backend:
+    depends_on:
+      - vllm
+      - llama-cpp-pg

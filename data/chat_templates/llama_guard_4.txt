@@ -1,0 +1,16 @@
+{%- if messages | length % 2 == 0 -%}
+{%- set role = 'Agent' -%}
+{%- else -%}
+{%- set role = 'User' -%}
+{%- endif -%}
+{{ "<|begin_of_text|>" }}
+{%- for message in messages -%}
+{%- if message['role'] == 'user' -%}
+{{ "<|header_start|>user<|header_end|>\n\n" + message['content'] | trim + "<|eot_id|>" }}
+{%- elif message['role'] == 'assistant' -%}
+{{ "<|header_start|>assistant<|header_end|>\n\n" + message['content'] | trim + "<|eot_id|>" }}
+{%- elif message['role'] == 'system' -%}
+{{ "<|header_start|>system<|header_end|>\n\n" + message['content'] | trim + "<|eot_id|>" }}
+{%- endif -%}
+{%- endfor -%}
+{{ "<|header_start|>assistant<|header_end|>\n\n" }}

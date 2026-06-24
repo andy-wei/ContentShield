@@ -1,0 +1,35 @@
+# =============================================================================
+# Override：纯本地 CPU profile（llama.cpp GGUF 跑 Llama-Guard-4-12B）
+# 叠加在 docker-compose.yml 之上：
+#   docker compose -f docker-compose.yml -f docker-compose.cpu.yml up -d --build
+#
+# 前置条件：
+#   1. 已下载 GGUF 量化模型到 ./models/（默认 llama-guard-4-12b-Q4_K_M.gguf）
+#   2. .env 设置 INFERENCE_PROFILE=local-cpu
+#
+# 注意：12B 模型纯 CPU 单次推理需数秒~数十秒，仅适用于离线/演示，不适合实时生产。
+# =============================================================================
+services:
+  # 本地 CPU 推理 Llama-Guard-4（llama.cpp）
+  llama-cpp-guard:
+    build:
+      context: ./inference/llama-cpp
+    image: contentshield-llama-cpp:latest
+    container_name: cs-llama-cpp-guard
+    restart: unless-stopped
+    environment:
+      - MODEL_PATH=${LLAMA_CPP_GGUF_PATH:-/models/llama-guard-4-12b-Q4_K_M.gguf}
+      - N_THREADS=${LLAMA_CPP_THREADS:-8}
+      - PORT=8080
+      - CONTEXT_SIZE=8192
+    volumes:
+      - ./models:/models:ro
+    ports:
+      - "8082:8080"
+    networks:
+      - cs-net
+
+  backend:
+    depends_on:
+      - llama-cpp-guard
+      - llama-cpp-pg

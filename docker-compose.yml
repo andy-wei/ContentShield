@@ -1,0 +1,80 @@
+# =============================================================================
+# ContentShield 基础编排（默认 cloud profile：Llama-Guard-4 走云 API）
+#
+# 启动：
+#   docker compose up -d --build
+#
+# 切换到本地 GPU：
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+#
+# 切换到纯本地 CPU：
+#   docker compose -f docker-compose.yml -f docker-compose.cpu.yml up -d --build
+# =============================================================================
+name: contentshield
+
+services:
+  # ---------------------------------------------------------------------------
+  # 后端 API（FastAPI）：检测编排、网关代理、规则/审计管理
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+    image: contentshield-backend:latest
+    container_name: cs-backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      # SQLite 数据库 + 词库热更新
+      - ./data:/app/data
+    depends_on:
+      - llama-cpp-pg
+    networks:
+      - cs-net
+
+  # ---------------------------------------------------------------------------
+  # 前端（React SPA，nginx 静态托管 + 反代后端 API）
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        - VITE_API_BASE=/api
+    image: contentshield-frontend:latest
+    container_name: cs-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    depends_on:
+      - backend
+    networks:
+      - cs-net
+
+  # ---------------------------------------------------------------------------
+  # Prompt Guard 2 86M（提示词注入/越狱检测）
+  # 轻量级，所有 profile 都用 llama.cpp CPU 跑，毫秒级
+  # ---------------------------------------------------------------------------
+  llama-cpp-pg:
+    build:
+      context: ./inference/llama-cpp
+    image: contentshield-llama-cpp:latest
+    container_name: cs-llama-cpp-pg
+    restart: unless-stopped
+    environment:
+      - MODEL_PATH=${PROMPT_GUARD_GGUF_PATH:-/models/Llama-Prompt-Guard-2-86M-Q8_0.gguf}
+      - N_THREADS=${LLAMA_CPP_THREADS:-8}
+      - PORT=8080
+      - CONTEXT_SIZE=4096
+    volumes:
+      - ./models:/models:ro
+    ports:
+      - "8081:8080"
+    networks:
+      - cs-net
+
+networks:
+  cs-net:
+    driver: bridge

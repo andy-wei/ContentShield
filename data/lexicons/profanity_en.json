@@ -1,0 +1,23 @@
+{
+  "lang": "en",
+  "category": "profanity",
+  "action": "warn",
+  "terms": [
+    "fuck",
+    "shit",
+    "bitch",
+    "asshole",
+    "bastard",
+    "damn",
+    "crap",
+    "dick",
+    "dickhead",
+    "piss",
+    "bollocks",
+    "wanker",
+    "prick",
+    "twat",
+    "slut",
+    "whore"
+  ]
+}

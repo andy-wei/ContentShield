@@ -60,6 +60,10 @@ class Orchestrator:
         self.dlp = DlpDetector()
         self.indirect_injection = IndirectInjectionDetector()
         self.cross_verify = CrossVerifyDetector()
+        # 结果缓存（ OrderedDict 做 LRU，最多 500 条，30 秒 TTL）
+        self._cache: dict[str, tuple[float, dict]] = {}
+        self._cache_max = 500
+        self._cache_ttl = 30.0  # 秒
 
     @property
     def detectors(self) -> list[BaseDetector]:
@@ -209,13 +213,30 @@ class Orchestrator:
         skip_audit: bool = False,
         identity: dict | None = None,
     ) -> dict:
-        """执行五层检测，返回融合结果。
+        """执行六层检测，返回融合结果。
 
         identity: 调用者身份 dict（principal_id/subject/scopes），用于审计归因。
         """
+        # ---- 结果缓存（30 秒 TTL，重复文本秒回）----
+        cache_key = f"{hash(text)}:{source}"
+        cached_entry = self._cache.get(cache_key)
+        if cached_entry:
+            cached_time, cached_result = cached_entry
+            import time as _time
+
+            if _time.perf_counter() - cached_time < self._cache_ttl:
+                import copy
+                result = copy.deepcopy(cached_result)
+                result["latency_ms"] = 0
+                result["_cached"] = True
+                return result
+            else:
+                del self._cache[cache_key]  # 过期删除
+
         t0 = time.perf_counter()
 
         # 六层并行（L0/L3 本地正则，L1/L2/L1.5/L4 走网络）
+        # 总耗时 = 最慢的那层（而非各层相加），因为 asyncio.gather 是并行
         results = await asyncio.gather(
             self.lexicon.detect(text, source=source),
             self.prompt_guard.detect(text, source=source),
@@ -234,6 +255,13 @@ class Orchestrator:
                 await self._write_audit(text, source, merged, results, identity)
             except Exception as e:  # noqa: BLE001
                 logger.warning("Audit write failed: %s", e)
+
+        # 存入缓存（LRU 淘汰）
+        self._cache[cache_key] = (time.perf_counter(), merged)
+        if len(self._cache) > self._cache_max:
+            # 淘汰最旧的（OrderedDict 按插入顺序，popitem(last=False) 删最旧）
+            oldest_key = next(iter(self._cache))
+            del self._cache[oldest_key]
 
         return merged
 

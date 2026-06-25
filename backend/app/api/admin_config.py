@@ -4,6 +4,9 @@
   GET  /api/config/cross-verify         读取交叉验证配置（API Key 脱敏）
   PUT  /api/config/cross-verify         更新配置（加密存 API Key）
   POST /api/config/cross-verify/test    测试交叉验证模型连接
+  GET  /api/config/security             读取安全策略配置
+  PUT  /api/config/security             更新安全策略配置
+  GET  /api/config/security/status      限流/锁定状态概览
 """
 from __future__ import annotations
 
@@ -137,3 +140,51 @@ async def test_cross_verify_connection(req: CrossVerifyConfig):
     except Exception as e:  # noqa: BLE001
         latency = int((time.perf_counter() - t0) * 1000)
         return TestResult(success=False, latency_ms=latency, detail=f"连接失败: {e}")
+
+
+# ---- 安全策略配置 ----
+
+class SecurityConfig(BaseModel):
+    """安全策略配置（限流 + 暴力破解防护）。"""
+
+    oauth_max_attempts: int = Field(5, ge=3, le=50, description="OAuth 认证失败上限")
+    oauth_lockout_minutes: int = Field(15, ge=1, le=1440, description="锁定时长（分钟）")
+    rate_limit_oauth: int = Field(10, ge=1, le=1000, description="/oauth 每分钟请求数")
+    rate_limit_api: int = Field(60, ge=1, le=10000, description="/v1 每分钟请求数")
+    rate_limit_admin: int = Field(120, ge=1, le=10000, description="/api 每分钟请求数")
+    admin_token_required: bool = Field(False, description="管理端点是否需鉴权")
+
+
+@router.get("/security", response_model=SecurityConfig)
+async def get_security_config():
+    """读取安全策略配置。"""
+    return SecurityConfig(
+        oauth_max_attempts=int(await config_service.get("security.oauth_max_attempts", "5")),
+        oauth_lockout_minutes=int(await config_service.get("security.oauth_lockout_minutes", "15")),
+        rate_limit_oauth=int(await config_service.get("security.rate_limit_oauth", "10")),
+        rate_limit_api=int(await config_service.get("security.rate_limit_api", "60")),
+        rate_limit_admin=int(await config_service.get("security.rate_limit_admin", "120")),
+        admin_token_required=await config_service.get_bool("security.admin_token_required"),
+    )
+
+
+@router.put("/security", response_model=SecurityConfig)
+async def update_security_config(req: SecurityConfig):
+    """更新安全策略配置（立即生效，无需重启）。"""
+    await config_service.set("security.oauth_max_attempts", str(req.oauth_max_attempts))
+    await config_service.set("security.oauth_lockout_minutes", str(req.oauth_lockout_minutes))
+    await config_service.set("security.rate_limit_oauth", str(req.rate_limit_oauth))
+    await config_service.set("security.rate_limit_api", str(req.rate_limit_api))
+    await config_service.set("security.rate_limit_admin", str(req.rate_limit_admin))
+    await config_service.set("security.admin_token_required", str(req.admin_token_required).lower())
+    await config_service.reload()
+    logger.info("Security config updated by admin")
+    return req
+
+
+@router.get("/security/status")
+async def get_security_status():
+    """获取限流/锁定实时状态（用于调试）。"""
+    from ..security.rate_limiter import rate_limiter
+
+    return rate_limiter.get_status()

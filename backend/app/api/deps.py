@@ -137,3 +137,26 @@ async def get_identity(
 
 # 便利别名
 RequireAuth = Depends(get_identity)
+
+
+async def get_admin_identity(
+    authorization: str | None = Header(default=None),
+    session: AsyncSession = Depends(get_session),
+) -> Identity:
+    """管理端点鉴权依赖。
+
+    当 security.admin_token_required=true 时强制校验 token；
+    否则放行（开发/内部 UI 默认模式）。
+    """
+    from ..services.config_service import config_service
+
+    require_admin = await config_service.get_bool("security.admin_token_required")
+    if not require_admin:
+        # 默认放行（避免锁死管理 UI）
+        return _anonymous_identity()
+
+    # 需要鉴权：复用 get_identity 逻辑
+    return await get_identity(authorization=authorization, session=session)
+
+
+RequireAdmin = Depends(get_admin_identity)

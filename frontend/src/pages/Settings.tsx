@@ -75,6 +75,9 @@ export function Settings() {
       {/* L4 交叉验证配置 */}
       <CrossVerifyConfigCard />
 
+      {/* 安全策略配置 */}
+      <SecurityConfigCard />
+
       {/* 隐私说明 */}
       <Card title="⚠️ 隐私与数据安全说明" actions={null}>
         <div className="space-y-3 text-sm text-slate-600">
@@ -293,6 +296,118 @@ function CrossVerifyConfigCard() {
           {saveMut.isSuccess && (
             <span className="self-center text-xs text-emerald-600">✓ 已保存，配置立即生效</span>
           )}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function SecurityConfigCard() {
+  const [cfg, setCfg] = useState({
+    oauth_max_attempts: 5,
+    oauth_lockout_minutes: 15,
+    rate_limit_oauth: 10,
+    rate_limit_api: 60,
+    rate_limit_admin: 120,
+    admin_token_required: false,
+  })
+  const [saved, setSaved] = useState(false)
+
+  useQuery({
+    queryKey: ['security-config'],
+    queryFn: async () => {
+      const r = await api.getSecurityConfig()
+      setCfg(r)
+      return r
+    },
+  })
+
+  const saveMut = useMutation({
+    mutationFn: () => api.updateSecurityConfig(cfg),
+    onSuccess: () => {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    },
+  })
+
+  const num = (
+    key: keyof typeof cfg,
+    label: string,
+    desc: string,
+    min = 1,
+  ) => (
+    <div>
+      <label className="mb-1 block text-xs text-slate-500">{label}</label>
+      <input
+        type="number"
+        min={min}
+        value={cfg[key] as number}
+        onChange={(e) => setCfg({ ...cfg, [key]: Number(e.target.value) })}
+        className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm"
+      />
+      <div className="mt-0.5 text-[11px] text-slate-400">{desc}</div>
+    </div>
+  )
+
+  return (
+    <Card
+      title="🛡️ 安全策略配置"
+      subtitle="暴力破解防护 + API 限流 + 管理端点鉴权。修改后立即生效，无需重启"
+    >
+      <div className="space-y-4">
+        {/* 暴力破解防护 */}
+        <div>
+          <div className="mb-2 text-xs font-medium text-slate-600">认证爆破防护</div>
+          <div className="grid grid-cols-2 gap-3">
+            {num('oauth_max_attempts', '失败次数上限', '连续认证失败几次后锁定', 3)}
+            {num('oauth_lockout_minutes', '锁定时长（分钟）', '触发锁定后多久自动解除', 1)}
+          </div>
+        </div>
+
+        {/* API 限流 */}
+        <div className="border-t border-slate-100 pt-3">
+          <div className="mb-2 text-xs font-medium text-slate-600">API 限流（每分钟最大请求数）</div>
+          <div className="grid grid-cols-3 gap-3">
+            {num('rate_limit_oauth', '/oauth', '认证端点', 1)}
+            {num('rate_limit_api', '/v1/*', '检测/代理 API', 1)}
+            {num('rate_limit_admin', '/api/*', '管理端点', 1)}
+          </div>
+        </div>
+
+        {/* 管理端点鉴权 */}
+        <div className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
+          <div>
+            <div className="text-sm font-medium text-slate-800">管理端点强制鉴权</div>
+            <div className="text-xs text-slate-500">
+              开启后 /api/* 端点需携带 NHI token（⚠️ 开启前确保已有有效 token）
+            </div>
+          </div>
+          <button
+            onClick={() => setCfg({ ...cfg, admin_token_required: !cfg.admin_token_required })}
+            className={cn(
+              'relative h-6 w-11 rounded-full transition-colors',
+              cfg.admin_token_required ? 'bg-brand-500' : 'bg-slate-300',
+            )}
+          >
+            <span
+              className={cn(
+                'absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform',
+                cfg.admin_token_required ? 'translate-x-5' : 'translate-x-0.5',
+              )}
+            />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => saveMut.mutate()}
+            disabled={saveMut.isPending}
+            className="inline-flex items-center gap-1.5 rounded-md bg-brand-500 px-4 py-1.5 text-sm text-white hover:bg-brand-600 disabled:opacity-50"
+          >
+            <CheckCircle2 size={14} />
+            保存安全策略
+          </button>
+          {saved && <span className="text-xs text-emerald-600">✓ 已保存，立即生效</span>}
         </div>
       </div>
     </Card>

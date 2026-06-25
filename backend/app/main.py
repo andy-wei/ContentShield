@@ -17,10 +17,18 @@ from .db import init_db
 async def lifespan(app: FastAPI):
     """应用生命周期：启动时建表、预热、加载配置。"""
     await init_db()
-    # 加载动态配置（SystemConfig）
+    # 加载动态配置（SystemConfig）+ seed 安全策略默认值
     from .services.config_service import config_service
 
     await config_service.reload()
+    await config_service.ensure_defaults({
+        "security.oauth_max_attempts": "5",
+        "security.oauth_lockout_minutes": "15",
+        "security.rate_limit_oauth": "10",
+        "security.rate_limit_api": "60",
+        "security.rate_limit_admin": "120",
+        "security.admin_token_required": "false",
+    })
     # 延迟导入，避免循环依赖
     from .engine.orchestrator import orchestrator
 
@@ -43,6 +51,54 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---- 全局限流中间件 ----
+@app.middleware("http")
+async def rate_limit_middleware(request, call_next):
+    """按 (IP, 路径前缀) 限流，超限返回 429。"""
+    from .security.client import get_client_ip
+    from .security.rate_limiter import rate_limiter
+    from .services.config_service import config_service
+
+    path = request.url.path
+    # 健康检查/docs 不限流
+    if path in ("/healthz", "/", "/docs", "/openapi.json", "/redoc"):
+        return await call_next(request)
+
+    ip = get_client_ip(request)
+
+    # 按路径前缀选限流策略
+    if path.startswith("/oauth"):
+        max_req = int(await config_service.get("security.rate_limit_oauth", "10"))
+        rate_key = f"rate:oauth:{ip}"
+    elif path.startswith("/v1/"):
+        max_req = int(await config_service.get("security.rate_limit_api", "60"))
+        rate_key = f"rate:api:{ip}"
+    elif path.startswith("/api/"):
+        max_req = int(await config_service.get("security.rate_limit_admin", "120"))
+        rate_key = f"rate:admin:{ip}"
+    else:
+        return await call_next(request)  # 其他路径不限流
+
+    allowed, remaining = rate_limiter.check_rate(rate_key, max_req, window_sec=60.0)
+    if not allowed:
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "请求过于频繁，请稍后再试"},
+            headers={
+                "Retry-After": "60",
+                "X-RateLimit-Limit": str(max_req),
+                "X-RateLimit-Remaining": "0",
+            },
+        )
+
+    response = await call_next(request)
+    response.headers["X-RateLimit-Limit"] = str(max_req)
+    response.headers["X-RateLimit-Remaining"] = str(remaining)
+    return response
 
 
 @app.get("/healthz", tags=["system"])

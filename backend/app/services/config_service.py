@@ -55,6 +55,17 @@ class ConfigService:
         self._loaded = True
         logger.info("SystemConfig loaded: %d keys", len(self._cache))
 
+    async def ensure_defaults(self, defaults: dict[str, str]) -> None:
+        """确保配置键存在，缺失的写入默认值（不覆盖已有值）。"""
+        changed = False
+        for key, value in defaults.items():
+            if key not in self._cache:
+                await self.set(key, value)
+                self._cache[key] = value
+                changed = True
+        if changed:
+            logger.info("SystemConfig seeded %d defaults", len(defaults))
+
     async def get(self, key: str, default: str = "") -> str:
         """读取配置值（从缓存）。"""
         await self._ensure_loaded()

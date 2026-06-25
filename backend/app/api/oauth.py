@@ -13,7 +13,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,14 +49,60 @@ def _require_encryption() -> None:
 
 @router.post("/oauth/token", response_model=TokenResponse)
 async def issue_token(
+    request: Request,
     req: TokenRequest,
     session: AsyncSession = Depends(get_session),
 ) -> TokenResponse:
-    """OAuth 2.0 Client Credentials Grant / Refresh Token Grant。"""
+    """OAuth 2.0 Client Credentials Grant / Refresh Token Grant。
+
+    含暴力破解防护：失败超过阈值后临时锁定 IP。
+    """
     _require_encryption()
 
+    # 暴力破解防护：检查 IP 是否被锁定
+    from ..security.client import get_client_ip
+    from ..security.rate_limiter import rate_limiter
+    from ..services.config_service import config_service
+
+    client_ip = get_client_ip(request)
+    lock_key = f"oauth:{client_ip}"
+
+    if rate_limiter.is_locked(lock_key):
+        remaining = rate_limiter.get_lock_remaining(lock_key)
+        logger.warning("OAuth locked: ip=%s remaining=%ds", client_ip, remaining)
+        raise HTTPException(
+            status_code=429,
+            detail=f"认证失败次数过多，已锁定 {remaining} 秒",
+            headers={"Retry-After": str(remaining)},
+        )
+
     if req.grant_type == "client_credentials":
-        principal = await _authenticate_client(req, session)
+        try:
+            principal = await _authenticate_client(req, session)
+        except HTTPException as e:
+            if e.status_code == 401:
+                # 记录认证失败
+                max_attempts = int(
+                    await config_service.get("security.oauth_max_attempts", "5")
+                )
+                lockout_min = int(
+                    await config_service.get("security.oauth_lockout_minutes", "15")
+                )
+                triggered = rate_limiter.record_failure(
+                    lock_key, max_attempts, lockout_min * 60
+                )
+                if triggered:
+                    logger.warning(
+                        "OAuth brute-force lockout: ip=%s", client_ip
+                    )
+                    raise HTTPException(
+                        status_code=429,
+                        detail=f"认证失败 {max_attempts} 次，已锁定 {lockout_min} 分钟",
+                        headers={"Retry-After": str(lockout_min * 60)},
+                    )
+            raise
+        # 认证成功，清除失败计数
+        rate_limiter.clear_failure(lock_key)
         return await _create_tokens(principal, session)
     elif req.grant_type == "refresh_token":
         return await _refresh_tokens(req, session)
@@ -75,11 +121,13 @@ async def _authenticate_client(
         select(NhiPrincipal).where(NhiPrincipal.client_id == req.client_id)
     )
     if not principal or not principal.enabled:
+        logger.warning("OAuth failed (not found/disabled): client_id=%s", req.client_id)
         raise HTTPException(status_code=401, detail="invalid_client")
 
     # 校验 secret（解密比对）
     stored_secret = decrypt(principal.client_secret_enc)
     if stored_secret != req.client_secret:
+        logger.warning("OAuth failed (bad secret): client_id=%s", req.client_id)
         raise HTTPException(status_code=401, detail="invalid_client")
 
     # 更新 last_used_at

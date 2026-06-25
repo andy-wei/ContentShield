@@ -215,4 +215,28 @@ export const api = {
     const { data } = await http.post('/api/config/cross-verify/test', req)
     return data
   },
+
+  // ---- 安全策略配置 ----
+  getSecurityConfig: async (): Promise<{
+    oauth_max_attempts: number
+    oauth_lockout_minutes: number
+    rate_limit_oauth: number
+    rate_limit_api: number
+    rate_limit_admin: number
+    admin_token_required: boolean
+  }> => {
+    const { data } = await http.get('/api/config/security')
+    return data
+  },
+  updateSecurityConfig: async (req: {
+    oauth_max_attempts: number
+    oauth_lockout_minutes: number
+    rate_limit_oauth: number
+    rate_limit_api: number
+    rate_limit_admin: number
+    admin_token_required: boolean
+  }) => {
+    const { data } = await http.put('/api/config/security', req)
+    return data
+  },
 }

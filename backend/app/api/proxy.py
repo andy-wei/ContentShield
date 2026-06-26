@@ -176,6 +176,99 @@ def _identity_to_dict(identity) -> dict | None:
     }
 
 
+async def _enforce_agent_security(body: dict, identity=None) -> dict | None:
+    """第 3 层应用安全：工具白名单 + 危险动作拦截 + 审计。
+
+    返回 refusal_response（dict）表示拦截；返回 None 表示放行。
+    会修改 body（过滤白名单外的工具）。
+    """
+    import uuid
+
+    from ..db import async_session
+    from ..models.agent_action import AgentAction
+    from ..models.identity import NhiPrincipal
+    from ..security.tool_policy import (
+        BUILTIN_DANGEROUS_TOOLS,
+        check_dangerous_actions,
+        enforce_tool_whitelist,
+        extract_all_tool_calls,
+        get_allowed_tools,
+    )
+    from ..services.config_service import config_service
+    from sqlalchemy import select
+
+    request_id = str(uuid.uuid4())[:8]
+    principal_id = identity.principal_id if identity else None
+    subject = identity.subject if identity else "anonymous"
+
+    # 获取该 NHI 的工具白名单
+    allowed_tools: list[str] = []
+    if identity and identity.is_authenticated and principal_id:
+        async with async_session() as session:
+            principal = await session.get(NhiPrincipal, principal_id)
+            if principal:
+                allowed_tools = get_allowed_tools(principal.allowed_tools)
+
+    # 获取危险工具黑名单（内置 + UI 可配）
+    custom_dangerous = await config_service.get("security.dangerous_tools", "")
+    dangerous_tools = BUILTIN_DANGEROUS_TOOLS + [
+        t.strip() for t in custom_dangerous.split(",") if t.strip()
+    ]
+
+    # ① 危险动作拦截（最高优先级）
+    dangerous_hits = check_dangerous_actions(body, dangerous_tools)
+    if dangerous_hits:
+        # 记录审计
+        await _record_actions(dangerous_hits, principal_id, subject, request_id, blocked=True)
+        if dangerous_hits:
+            reason = dangerous_hits[0]["reason"]
+            logger.warning("Dangerous action blocked: %s by %s", reason, subject)
+            return _refusal_response(
+                body.get("model", ""), f"dangerous_action_blocked: {reason}"
+            )
+
+    # ② 工具白名单过滤
+    body, removed = enforce_tool_whitelist(body, allowed_tools)
+    if removed:
+        logger.info("Tools removed by whitelist: %s (allowed=%s)", removed, allowed_tools)
+
+    # ③ 动作审计（记录所有 tool_calls）
+    all_calls = extract_all_tool_calls(body)
+    if all_calls:
+        await _record_actions(all_calls, principal_id, subject, request_id, blocked=False)
+
+    return None
+
+
+async def _record_actions(
+    calls: list[dict],
+    principal_id: int | None,
+    subject: str,
+    request_id: str,
+    blocked: bool,
+) -> None:
+    """批量记录工具调用动作到审计库。"""
+    from datetime import datetime
+
+    from ..db import async_session
+    from ..models.agent_action import AgentAction
+
+    async with async_session() as session:
+        for call in calls:
+            action = AgentAction(
+                principal_id=principal_id,
+                subject=subject,
+                tool_name=call.get("tool_name", ""),
+                arguments_summary=call.get("arguments_summary", ""),
+                source=call.get("source", "request"),
+                blocked=blocked,
+                block_reason=call.get("reason", ""),
+                request_id=request_id,
+            )
+            session.add(action)
+        await session.commit()
+
+
 @router.post("/v1/chat/completions", response_model=None)
 async def chat_completions(
     request: Request,
@@ -204,6 +297,11 @@ async def chat_completions(
 
     # 用脱敏后的 body（若有）
     forward_body = modified_body if modified_body is not None else body
+
+    # ---- 第 3 层应用安全：工具白名单 + 危险动作拦截 + 审计 ----
+    tool_blocked = await _enforce_agent_security(forward_body, identity)
+    if tool_blocked is not None:
+        return JSONResponse(tool_blocked)
 
     # ---- 流式分支 ----
     if is_stream:

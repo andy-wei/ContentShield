@@ -188,3 +188,27 @@ async def get_security_status():
     from ..security.rate_limiter import rate_limiter
 
     return rate_limiter.get_status()
+
+
+@router.get("/dangerous-tools")
+async def get_dangerous_tools():
+    """获取危险工具黑名单（内置 + 自定义）。"""
+    from ..security.tool_policy import BUILTIN_DANGEROUS_TOOLS
+
+    custom_str = await config_service.get("security.dangerous_tools", "")
+    custom = [t.strip() for t in custom_str.split(",") if t.strip()]
+    return {"builtin": BUILTIN_DANGEROUS_TOOLS, "custom": custom}
+
+
+@router.put("/dangerous-tools")
+async def update_dangerous_tools(req: dict):
+    """更新自定义危险工具黑名单（逗号分隔字符串或列表）。"""
+    tools = req.get("custom", [])
+    if isinstance(tools, list):
+        tools_str = ",".join(tools)
+    else:
+        tools_str = str(tools)
+    await config_service.set("security.dangerous_tools", tools_str)
+    await config_service.reload()
+    logger.info("Dangerous tools blacklist updated: %s", tools_str)
+    return {"custom": [t.strip() for t in tools_str.split(",") if t.strip()]}

@@ -28,6 +28,7 @@ async def lifespan(app: FastAPI):
         "security.rate_limit_api": "60",
         "security.rate_limit_admin": "120",
         "security.admin_token_required": "false",
+        "security.dangerous_tools": "",
     })
     # 延迟导入，避免循环依赖
     from .engine.orchestrator import orchestrator

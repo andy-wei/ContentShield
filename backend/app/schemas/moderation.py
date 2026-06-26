@@ -11,7 +11,7 @@ class ModerationRequest(BaseModel):
 
     text: str = Field(..., description="待检测文本")
     source: Literal[
-        "user_prompt", "llm_response", "gateway", "tool_response", "test"
+        "user_prompt", "llm_response", "gateway", "tool_response", "agent_action", "test"
     ] = Field("user_prompt", description="来源标识，用于审计分组")
     # 可选对话上下文（多轮场景，仅取最后一条做检测但保留上下文）
     context: list[dict] | None = Field(

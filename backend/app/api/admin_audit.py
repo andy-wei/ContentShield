@@ -68,7 +68,7 @@ async def list_audit(
     }
 
 
-@router.get("/{log_id}")
+@router.get("/{log_id:int}")
 async def get_audit(log_id: int, session: AsyncSession = Depends(get_session)):
     log = await session.get(AuditLog, log_id)
     if not log:
@@ -132,3 +132,50 @@ async def export_csv(
             "Content-Disposition": f"attachment; filename=audit_{datetime.utcnow().date()}.csv"
         },
     )
+
+
+# ---- Agent 动作审计 ----
+@router.get("/agent-actions")
+async def list_actions(
+    page: int = 1,
+    page_size: int = 20,
+    blocked: bool | None = None,
+    subject: str | None = None,
+    session: AsyncSession = Depends(get_session),
+):
+    """查询 Agent 工具调用动作审计。"""
+    from ..models.agent_action import AgentAction
+
+    stmt = select(AgentAction).order_by(AgentAction.id.desc())
+    if blocked is not None:
+        stmt = stmt.where(AgentAction.blocked == blocked)
+    if subject:
+        stmt = stmt.where(AgentAction.subject == subject)
+
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = (await session.execute(count_stmt)).scalar() or 0
+
+    stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+    res = await session.execute(stmt)
+    rows = res.scalars().all()
+
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": [
+            {
+                "id": r.id,
+                "created_at": r.created_at.isoformat(),
+                "principal_id": r.principal_id,
+                "subject": r.subject,
+                "tool_name": r.tool_name,
+                "arguments_summary": r.arguments_summary[:100],
+                "source": r.source,
+                "blocked": r.blocked,
+                "block_reason": r.block_reason,
+                "request_id": r.request_id,
+            }
+            for r in rows
+        ],
+    }

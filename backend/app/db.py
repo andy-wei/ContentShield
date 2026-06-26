@@ -73,6 +73,9 @@ def _auto_migrate(connection) -> None:
             ("subject", "VARCHAR(128) DEFAULT ''"),
             ("scopes", "VARCHAR(256) DEFAULT ''"),
         ],
+        "nhi_principals": [
+            ("allowed_tools", "TEXT DEFAULT '[]'"),
+        ],
     }
     for table, columns in migrations.items():
         if not inspector.has_table(table):

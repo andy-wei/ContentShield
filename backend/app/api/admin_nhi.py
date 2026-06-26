@@ -121,6 +121,44 @@ async def rotate_secret(
     )
 
 
+@router.get("/principals/{principal_id}/tools")
+async def get_tools(
+    principal_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    """获取 NHI 的工具白名单。"""
+    import json
+
+    principal = await session.get(NhiPrincipal, principal_id)
+    if not principal:
+        raise HTTPException(status_code=404, detail="not found")
+    try:
+        tools = json.loads(principal.allowed_tools or "[]")
+    except (json.JSONDecodeError, TypeError):
+        tools = []
+    return {"allowed_tools": tools}
+
+
+@router.put("/principals/{principal_id}/tools")
+async def update_tools(
+    principal_id: int,
+    req: dict,
+    session: AsyncSession = Depends(get_session),
+):
+    """更新 NHI 的工具白名单。空列表 = 全部允许。"""
+    import json
+
+    principal = await session.get(NhiPrincipal, principal_id)
+    if not principal:
+        raise HTTPException(status_code=404, detail="not found")
+    tools = req.get("allowed_tools", [])
+    if not isinstance(tools, list):
+        raise HTTPException(status_code=400, detail="allowed_tools must be a list")
+    principal.allowed_tools = json.dumps(tools)
+    await session.commit()
+    return {"allowed_tools": tools}
+
+
 @router.get("/tokens")
 async def list_tokens(
     only_active: bool = True,

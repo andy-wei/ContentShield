@@ -1,19 +1,22 @@
-/** 身份管理页：NHI 创建/列表/轮转/禁用 + Token 管理 + OAuth 测试。 */
+/** 身份管理页：NHI 创建/列表/轮转/禁用 + Token 管理 + OAuth 测试 + 工具白名单。 */
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
   Copy,
   Check,
+  CheckCircle2,
   KeyRound,
   Plus,
   RefreshCw,
   Trash2,
   LogIn,
   ShieldCheck,
+  Wrench,
 } from 'lucide-react'
 import { api } from '../api/client'
 import { Card } from '../components/Card'
+import { TagEditor } from '../components/TagEditor'
 import { cn } from '../lib/format'
 import { useAuth } from '../store/auth'
 import type { NhiPrincipal } from '../api/types'
@@ -229,6 +232,7 @@ function PrincipalsList({ onCreate }: { onCreate: () => void }) {
   })
 
   const [rotated, setRotated] = useState<{ id: number; secret: string } | null>(null)
+  const [expandedId, setExpandedId] = useState<number | null>(null)
 
   const delMut = useMutation({
     mutationFn: (id: number) => api.deletePrincipal(id),
@@ -284,50 +288,150 @@ function PrincipalsList({ onCreate }: { onCreate: () => void }) {
           <div
             key={p.id}
             className={cn(
-              'flex items-center gap-3 rounded-lg border p-3',
+              'rounded-lg border',
               p.enabled ? 'border-slate-200' : 'border-slate-200 bg-slate-50 opacity-60',
             )}
           >
-            <div className={cn('flex h-8 w-8 items-center justify-center rounded-full',
-              p.enabled ? 'bg-brand-50 text-brand-500' : 'bg-slate-200 text-slate-400')}>
-              <ShieldCheck size={16} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-slate-800">{p.label}</span>
-                <span className={cn(
-                  'rounded px-1.5 py-0.5 text-[10px]',
-                  p.enabled ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-500',
-                )}>
-                  {p.enabled ? '启用' : '已禁用'}
-                </span>
+            <div className="flex items-center gap-3 p-3">
+              <div className={cn('flex h-8 w-8 items-center justify-center rounded-full',
+                p.enabled ? 'bg-brand-50 text-brand-500' : 'bg-slate-200 text-slate-400')}>
+                <ShieldCheck size={16} />
               </div>
-              <div className="mt-0.5 truncate font-mono text-xs text-slate-400">
-                {p.client_id}
-                {p.upstream_provider && (
-                  <span className="ml-2 text-slate-500">→ {p.upstream_provider}</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-slate-800">{p.label}</span>
+                  <span className={cn(
+                    'rounded px-1.5 py-0.5 text-[10px]',
+                    p.enabled ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-500',
+                  )}>
+                    {p.enabled ? '启用' : '已禁用'}
+                  </span>
+                  <ToolsBadge principalId={p.id} />
+                </div>
+                <div className="mt-0.5 truncate font-mono text-xs text-slate-400">
+                  {p.client_id}
+                  {p.upstream_provider && (
+                    <span className="ml-2 text-slate-500">→ {p.upstream_provider}</span>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setExpandedId(expandedId === p.id ? null : p.id)}
+                title="工具白名单"
+                className={cn(
+                  'rounded p-1.5',
+                  expandedId === p.id
+                    ? 'bg-brand-50 text-brand-600'
+                    : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600',
                 )}
-              </div>
+              >
+                <Wrench size={14} />
+              </button>
+              <button
+                onClick={() => rotMut.mutate(p.id)}
+                disabled={!p.enabled}
+                title="轮转 secret"
+                className="rounded p-1.5 text-slate-400 hover:bg-amber-50 hover:text-amber-500 disabled:opacity-30"
+              >
+                <RefreshCw size={14} />
+              </button>
+              <button
+                onClick={() => delMut.mutate(p.id)}
+                title="禁用"
+                className="rounded p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-500"
+              >
+                <Trash2 size={14} />
+              </button>
             </div>
-            <button
-              onClick={() => rotMut.mutate(p.id)}
-              disabled={!p.enabled}
-              title="轮转 secret"
-              className="rounded p-1.5 text-slate-400 hover:bg-amber-50 hover:text-amber-500 disabled:opacity-30"
-            >
-              <RefreshCw size={14} />
-            </button>
-            <button
-              onClick={() => delMut.mutate(p.id)}
-              title="禁用"
-              className="rounded p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-500"
-            >
-              <Trash2 size={14} />
-            </button>
+            {expandedId === p.id && <ToolsEditorPanel principalId={p.id} />}
           </div>
         ))}
       </div>
     </Card>
+  )
+}
+
+/** NHI 行内白名单状态徽标：空 = 全部允许（灰），非空 = N 项（蓝）。 */
+function ToolsBadge({ principalId }: { principalId: number }) {
+  const { data } = useQuery({
+    queryKey: ['principal-tools', principalId],
+    queryFn: () => api.getPrincipalTools(principalId),
+  })
+  if (!data) return null
+  const n = data.allowed_tools.length
+  return (
+    <span
+      className={cn(
+        'rounded px-1.5 py-0.5 text-[10px]',
+        n > 0 ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400',
+      )}
+      title={n > 0 ? `白名单：${data.allowed_tools.join(', ')}` : '未配置白名单，允许调用全部工具'}
+    >
+      工具 {n > 0 ? `${n} 项白名单` : '不限'}
+    </span>
+  )
+}
+
+/** 展开式工具白名单编辑面板。空列表 = 全部允许（后端语义）。 */
+function ToolsEditorPanel({ principalId }: { principalId: number }) {
+  const qc = useQueryClient()
+  const [tools, setTools] = useState<string[] | null>(null)
+  const [saved, setSaved] = useState(false)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['principal-tools', principalId],
+    queryFn: () => api.getPrincipalTools(principalId),
+  })
+
+  // 首次加载后初始化本地编辑态
+  if (data && tools === null) setTools(data.allowed_tools)
+
+  const saveMut = useMutation({
+    mutationFn: (t: string[]) => api.updatePrincipalTools(principalId, t),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['principal-tools', principalId] })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    },
+  })
+
+  if (isLoading || tools === null) {
+    return <div className="border-t border-slate-100 px-3 py-3 text-xs text-slate-400">加载中…</div>
+  }
+
+  return (
+    <div className="border-t border-slate-100 bg-slate-50/50 p-3">
+      <div className="mb-1.5 text-xs font-medium text-slate-600">
+        工具白名单（第 3 层应用安全）
+      </div>
+      <div className="mb-2 text-[11px] leading-relaxed text-slate-400">
+        限制此 NHI 通过网关调用时可用的工具（请求中 tools 声明会被过滤，tool_choice 强制项会被降级为
+        auto）。留空 = 不限制（全部允许）。
+      </div>
+      <TagEditor
+        tags={tools}
+        onChange={setTools}
+        placeholder="工具名，如 web_search / read_file，回车添加"
+        emptyHint="（空 = 允许全部工具）"
+      />
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          onClick={() => saveMut.mutate(tools)}
+          disabled={saveMut.isPending}
+          className="inline-flex items-center gap-1 rounded-md bg-brand-500 px-3.5 py-1.5 text-xs text-white hover:bg-brand-600 disabled:opacity-50"
+        >
+          <CheckCircle2 size={13} /> 保存白名单
+        </button>
+        <button
+          onClick={() => setTools([])}
+          className="rounded-md border border-slate-200 px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-50"
+        >
+          清空（全部允许）
+        </button>
+        {saveMut.isError && <span className="text-xs text-rose-500">保存失败，请重试</span>}
+        {saved && <span className="text-xs text-emerald-600">✓ 已保存，立即生效</span>}
+      </div>
+    </div>
   )
 }
 

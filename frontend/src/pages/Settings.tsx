@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, XCircle, AlertTriangle, RefreshCw, Zap, Loader2 } from 'lucide-react'
 import { api } from '../api/client'
 import { Card } from '../components/Card'
+import { TagEditor } from '../components/TagEditor'
 import { useSettings } from '../store/settings'
 import { cn } from '../lib/format'
 
@@ -80,6 +81,9 @@ export function Settings() {
 
       {/* 安全策略配置 */}
       <SecurityConfigCard />
+
+      {/* 危险工具黑名单 */}
+      <DangerousToolsCard />
 
       {/* L5 代码安全配置 */}
       <CodeShieldConfigCard />
@@ -640,6 +644,98 @@ function CodeShieldConfigCard() {
             {saveMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
             保存配置
           </button>
+          {saved && <span className="text-xs text-emerald-600">✓ 已保存，立即生效</span>}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function DangerousToolsCard() {
+  const qc = useQueryClient()
+  const [custom, setCustom] = useState<string[] | null>(null)
+  const [showAllBuiltin, setShowAllBuiltin] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const { data } = useQuery({
+    queryKey: ['dangerous-tools'],
+    queryFn: api.getDangerousTools,
+  })
+
+  // 首次加载后初始化本地编辑态
+  if (data && custom === null) setCustom(data.custom)
+
+  const saveMut = useMutation({
+    mutationFn: (list: string[]) => api.updateDangerousTools(list),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['dangerous-tools'] })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    },
+  })
+
+  if (!data || custom === null) {
+    return (
+      <Card title="🚫 危险工具黑名单" subtitle="Agent 工具调用中的绝对禁区（第 3 层应用安全）">
+        <div className="flex items-center gap-2 text-xs text-slate-400">
+          <Loader2 size={13} className="animate-spin" /> 加载中…
+        </div>
+      </Card>
+    )
+  }
+
+  const builtin = data.builtin
+  const shownBuiltin = showAllBuiltin ? builtin : builtin.slice(0, 8)
+
+  return (
+    <Card
+      title="🚫 危险工具黑名单"
+      subtitle="网关拦截 Agent 对黑名单工具的调用（tool_calls 命中即拦截 + 记审计）。与 NHI 白名单配合：白名单限制能用什么，黑名单定义绝不能用什么"
+    >
+      <div className="space-y-4">
+        {/* 内置黑名单（只读） */}
+        <div className="rounded-lg border border-slate-200 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-600">
+              内置黑名单（{builtin.length} 项，始终生效）
+            </span>
+            {builtin.length > 8 && (
+              <button
+                onClick={() => setShowAllBuiltin(!showAllBuiltin)}
+                className="text-xs text-brand-600 hover:underline"
+              >
+                {showAllBuiltin ? '收起' : `展开全部 ${builtin.length} 项`}
+              </button>
+            )}
+          </div>
+          <TagEditor tags={shownBuiltin} readOnly tone="rose" />
+        </div>
+
+        {/* 自定义追加 */}
+        <div className="rounded-lg border border-slate-200 p-3">
+          <div className="mb-2 text-xs font-medium text-slate-600">自定义追加（拦截你业务中的高危工具）</div>
+          <TagEditor
+            tags={custom}
+            onChange={setCustom}
+            tone="rose"
+            placeholder="工具名，如 send_sms / deploy_prod，回车添加"
+            emptyHint="（无自定义项）"
+          />
+          <div className="mt-2 text-[11px] text-slate-400">
+            命中判断不区分大小写，按工具名精确匹配（如 execute_shell、drop_table）。
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => saveMut.mutate(custom)}
+            disabled={saveMut.isPending}
+            className="inline-flex items-center gap-1.5 rounded-md bg-brand-500 px-4 py-1.5 text-sm text-white hover:bg-brand-600 disabled:opacity-50"
+          >
+            {saveMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+            保存黑名单
+          </button>
+          {saveMut.isError && <span className="text-xs text-rose-500">保存失败，请重试</span>}
           {saved && <span className="text-xs text-emerald-600">✓ 已保存，立即生效</span>}
         </div>
       </div>

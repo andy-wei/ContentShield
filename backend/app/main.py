@@ -33,6 +33,8 @@ async def lifespan(app: FastAPI):
             "security.dangerous_tools": "",
             "code_shield.enabled": "false",
             "code_shield.action": "warn",
+            "alignment_check.enabled": "false",
+            "alignment_check.action": "warn",
         }
     )
     # seed 默认扫描门禁策略

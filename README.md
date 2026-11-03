@@ -27,7 +27,7 @@
 
 - 🔍 **7 层纵深防御**：词库 → 注入检测 → 间接注入 → 危害分类 → DLP 防泄露 → 交叉验证 → 代码安全审计
 - 🛡️ **AI 网关代理**：OpenAI 兼容，双向拦截（输入 + 输出），自动脱敏改写
-- 🤖 **Agent 运行时安全**：工具白名单过滤、危险动作拦截、全量工具调用审计
+- 🤖 **Agent 运行时安全**：工具白名单过滤、危险动作拦截、全量工具调用审计、**行为对齐检测**（AlignmentCheck：无状态轨迹重建 + LLM 判定目标漂移/劫持，灵感来自 Meta LlamaFirewall，判定模型复用 L4 交叉验证配置）
 - 🎯 **威胁建模**：STRIDE + AI 专属维度，LLM 自动生成威胁，控制层证据联动（建模→控制→实际拦截闭环）
 - 🔎 **DevSecOps 扫描平台**：编排 bandit/gitleaks/trivy/pip-audit/npm-audit，异步任务队列（Celery+Redis），CI 门禁，漏洞聚合去重与可视化
 - 📊 **训练数据安全**：数据集投毒检测（5 类模式）+ PII/有害内容扫描，复用 7 层检测引擎，数据集版本溯源与差异分析
@@ -277,6 +277,7 @@ agent.chat(search_result)
 | `/api/rules/dlp` | DLP 正则规则管理 |
 | `/api/config/cross-verify` | L4 交叉验证配置（UI 可改） |
 | `/api/config/code-shield` | L5 代码安全配置（开关 + warn/block 动作，UI 可改） |
+| `/api/config/alignment-check` | 行为对齐检测配置（开关 + 动作 + 可选 LLM 覆盖，默认复用交叉验证模型） |
 | `/api/config/security` | 安全策略（限流阈值/爆破防护/管理鉴权开关） |
 | `/api/config/dangerous-tools` | 危险工具黑名单管理 |
 | `/api/config/threat-model` | 威胁建模 LLM 配置 |

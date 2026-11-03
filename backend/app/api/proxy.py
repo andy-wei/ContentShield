@@ -269,6 +269,61 @@ async def _record_actions(
         await session.commit()
 
 
+async def _check_alignment(body: dict, identity=None) -> tuple[dict | None, str | None]:
+    """行为对齐检测（AlignmentCheck，灵感来自 Meta LlamaFirewall）。
+
+    从请求 messages 无状态重建轨迹（首条 user 消息=意图，历史 tool_calls=动作），
+    LLM 判定最新动作是否目标漂移/被劫持。
+
+    返回 (refusal_response|None, warn_reason|None)：
+    - block 模式且判定漂移：refusal + 写动作审计（blocked=true）
+    - warn 模式且判定漂移：warn_reason（调用方在响应中标记后放行）
+    - 跳过/fail-open：(None, None)
+    """
+    import uuid
+
+    from ..security.alignment_check import alignment_check_service
+
+    verdict = await alignment_check_service.check(body)
+    if verdict.aligned is not False:
+        return None, None
+
+    from ..services.config_service import config_service
+
+    action = await config_service.get("alignment_check.action", default="warn")
+    reason = verdict.drift_reason or "goal drift detected"
+    subject = identity.subject if identity else "anonymous"
+    principal_id = identity.principal_id if identity else None
+
+    # 提取最新 tool_calls（漂移动作）用于审计
+    latest_calls: list[dict] = []
+    for msg in reversed(body.get("messages", [])):
+        if isinstance(msg, dict) and msg.get("role") == "assistant" and msg.get("tool_calls"):
+            for tc in msg["tool_calls"]:
+                if not isinstance(tc, dict):
+                    continue
+                fn = tc.get("function", {}) if tc.get("type") == "function" else {}
+                latest_calls.append(
+                    {
+                        "tool_name": fn.get("name", tc.get("name", "")),
+                        "arguments_summary": str(fn.get("arguments", tc.get("arguments", "")))[:200],
+                        "source": "request",
+                        "reason": f"alignment_drift: {reason}"[:256],
+                    }
+                )
+            break
+
+    if action == "block":
+        request_id = str(uuid.uuid4())[:8]
+        if latest_calls:
+            await _record_actions(latest_calls, principal_id, subject, request_id, blocked=True)
+        logger.warning("Alignment drift BLOCKED: %s (by %s)", reason, subject)
+        return _refusal_response(body.get("model", ""), f"goal_drift_blocked: {reason}"), None
+
+    logger.warning("Alignment drift WARN: %s (by %s)", reason, subject)
+    return None, reason
+
+
 @router.post("/v1/chat/completions", response_model=None)
 async def chat_completions(
     request: Request,
@@ -302,6 +357,11 @@ async def chat_completions(
     tool_blocked = await _enforce_agent_security(forward_body, identity)
     if tool_blocked is not None:
         return JSONResponse(tool_blocked)
+
+    # ---- 第 3 层应用安全（续）：行为对齐检测（目标漂移/劫持）----
+    drift_refusal, alignment_warn = await _check_alignment(forward_body, identity)
+    if drift_refusal is not None:
+        return JSONResponse(drift_refusal)
 
     # ---- 流式分支 ----
     if is_stream:
@@ -341,5 +401,9 @@ async def chat_completions(
                     )
                 except (KeyError, IndexError, TypeError):  # noqa: BLE001
                     pass
+
+    # 行为对齐 warn 标记（block 模式已在前面拦截，这里只标记不阻断）
+    if alignment_warn:
+        upstream.setdefault("contentshield", {})["alignment_warn"] = alignment_warn
 
     return JSONResponse(upstream)

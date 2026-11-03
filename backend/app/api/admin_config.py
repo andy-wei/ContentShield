@@ -323,3 +323,99 @@ async def update_code_shield_config(req: CodeShieldConfig):
     await config_service.reload()
     logger.info("CodeShield config updated: enabled=%s action=%s", req.enabled, req.action)
     return req
+
+
+# ---- 行为对齐（AlignmentCheck）配置 ----
+
+
+class AlignmentCheckConfig(BaseModel):
+    """行为对齐检测配置（LLM 覆盖项留空 = 复用交叉验证的模型配置）。"""
+
+    enabled: bool = Field(False, description="是否启用行为对齐检测")
+    action: Literal["warn", "block"] = Field(
+        "warn", description="判定漂移时的动作：warn 标记放行 / block 拦截"
+    )
+    base_url: str = Field("", description="OpenAI 兼容端点（留空=复用交叉验证）")
+    api_key: str = Field("", description="API Key（留空=不修改已有值；为空且交叉验证有 key 则复用）")
+    model: str = Field("", description="模型名（留空=复用交叉验证）")
+
+
+class AlignmentCheckConfigRead(BaseModel):
+    """行为对齐配置读取（API Key 脱敏）。"""
+
+    enabled: bool
+    action: Literal["warn", "block"]
+    base_url: str
+    api_key_masked: str = ""
+    api_key_set: bool = False
+    model: str
+    source_hint: str = Field("", description="LLM 配置来源提示")
+
+
+@router.get("/alignment-check", response_model=AlignmentCheckConfigRead)
+async def get_alignment_check_config():
+    """读取行为对齐检测配置（API Key 脱敏；LLM 项留空时显示回退生效值）。"""
+    enabled = await config_service.get_bool("alignment_check.enabled")
+    action = await config_service.get("alignment_check.action", default="warn")
+    if action not in ("warn", "block"):
+        action = "warn"
+
+    own_base = await config_service.get("alignment_check.base_url")
+    own_model = await config_service.get("alignment_check.model")
+    own_key = await config_service.get("alignment_check.api_key")
+
+    # 回退到交叉验证配置（显示实际生效值，UI 提示来源）
+    base_url = own_base or await config_service.get(
+        "cross_verify.base_url", default="https://api.openai.com/v1"
+    )
+    model = own_model or await config_service.get("cross_verify.model", default="gpt-4o-mini")
+    cv_key = "" if own_key else await config_service.get("cross_verify.api_key")
+    api_key = own_key or cv_key
+
+    if api_key:
+        masked = api_key[:3] + "***" + api_key[-4:] if len(api_key) > 8 else "***"
+    else:
+        masked = ""
+
+    source = "自有配置" if (own_key or own_base) else (
+        "复用 L4 交叉验证模型配置" if cv_key else "未配置（检测将跳过）"
+    )
+
+    return AlignmentCheckConfigRead(
+        enabled=enabled,
+        action=action,  # type: ignore[arg-type]
+        base_url=base_url,
+        api_key_masked=masked,
+        api_key_set=bool(api_key),
+        model=model,
+        source_hint=source,
+    )
+
+
+@router.put("/alignment-check", response_model=AlignmentCheckConfigRead)
+async def update_alignment_check_config(req: AlignmentCheckConfig):
+    """更新行为对齐检测配置。LLM 项留空保留/回退，API Key 非空才覆盖。"""
+    await config_service.set(
+        "alignment_check.enabled", str(req.enabled).lower(), description="行为对齐开关"
+    )
+    await config_service.set(
+        "alignment_check.action", req.action, description="行为对齐动作 warn/block"
+    )
+    if req.base_url:
+        await config_service.set("alignment_check.base_url", req.base_url)
+    if req.model:
+        await config_service.set("alignment_check.model", req.model)
+    if req.api_key:
+        await config_service.set(
+            "alignment_check.api_key", req.api_key, secret=True, description="行为对齐 API Key"
+        )
+    await config_service.reload()
+
+    # 配置变更 → 重建 backend + 清空结论缓存
+    from ..security.alignment_check import alignment_check_service
+
+    await alignment_check_service.invalidate_cache()
+    await alignment_check_service._ensure_backend(force=True)
+
+    logger.info("AlignmentCheck config updated: enabled=%s action=%s", req.enabled, req.action)
+    return await get_alignment_check_config()

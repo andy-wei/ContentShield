@@ -85,6 +85,9 @@ export function Settings() {
       {/* 危险工具黑名单 */}
       <DangerousToolsCard />
 
+      {/* 行为对齐检测 */}
+      <AlignmentConfigCard />
+
       {/* L5 代码安全配置 */}
       <CodeShieldConfigCard />
 
@@ -734,6 +737,162 @@ function DangerousToolsCard() {
           >
             {saveMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
             保存黑名单
+          </button>
+          {saveMut.isError && <span className="text-xs text-rose-500">保存失败，请重试</span>}
+          {saved && <span className="text-xs text-emerald-600">✓ 已保存，立即生效</span>}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function AlignmentConfigCard() {
+  const [enabled, setEnabled] = useState(false)
+  const [action, setAction] = useState<'warn' | 'block'>('warn')
+  const [baseUrl, setBaseUrl] = useState('')
+  const [apiKey, setApiKey] = useState('')
+  const [model, setModel] = useState('')
+  const [sourceHint, setSourceHint] = useState('')
+  const [saved, setSaved] = useState(false)
+
+  const { data: config } = useQuery({
+    queryKey: ['alignment-check-config'],
+    queryFn: async () => {
+      const r = await api.getAlignmentCheckConfig()
+      setEnabled(r.enabled)
+      setAction(r.action)
+      setBaseUrl(r.base_url)
+      setModel(r.model)
+      setSourceHint(r.source_hint)
+      return r
+    },
+  })
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      api.updateAlignmentCheckConfig({ enabled, action, base_url: baseUrl, api_key: apiKey, model }),
+    onSuccess: () => {
+      setSaved(true)
+      setApiKey('')
+      setTimeout(() => setSaved(false), 2000)
+    },
+  })
+
+  return (
+    <Card
+      title="🎯 行为对齐检测（AlignmentCheck）"
+      subtitle="检测 Agent 工具调用是否偏离用户最初目标（goal drift / 被劫持），灵感来自 Meta LlamaFirewall。无状态轨迹重建：从请求历史重建意图与动作序列，LLM 判定漂移。默认关闭"
+    >
+      <div className="space-y-4">
+        {/* 启用开关 */}
+        <div className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
+          <div>
+            <div className="text-sm font-medium text-slate-800">启用行为对齐检测</div>
+            <div className="text-xs text-slate-500">
+              网关在每次含工具调用的请求上判定：最新动作是否偏离首条用户消息的意图（如 订机票→外发数据）
+            </div>
+          </div>
+          <button
+            onClick={() => setEnabled(!enabled)}
+            className={cn(
+              'relative h-6 w-11 rounded-full transition-colors',
+              enabled ? 'bg-brand-500' : 'bg-slate-300',
+            )}
+          >
+            <span
+              className={cn(
+                'absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform',
+                enabled ? 'translate-x-5' : 'translate-x-0.5',
+              )}
+            />
+          </button>
+        </div>
+
+        {/* 动作选择 */}
+        <div className="rounded-lg border border-slate-200 p-3">
+          <div className="mb-2 text-xs font-medium text-slate-600">判定漂移时</div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setAction('warn')}
+              className={cn(
+                'flex-1 rounded-md border px-3 py-2 text-sm',
+                action === 'warn'
+                  ? 'border-amber-300 bg-amber-50 text-amber-700'
+                  : 'border-slate-200 text-slate-600 hover:bg-slate-50',
+              )}
+            >
+              ⚠️ Warn（标记放行）
+              <div className="text-[11px] font-normal text-slate-400">响应中附 alignment_warn 标记</div>
+            </button>
+            <button
+              onClick={() => setAction('block')}
+              className={cn(
+                'flex-1 rounded-md border px-3 py-2 text-sm',
+                action === 'block'
+                  ? 'border-rose-300 bg-rose-50 text-rose-700'
+                  : 'border-slate-200 text-slate-600 hover:bg-slate-50',
+              )}
+            >
+              🚫 Block（拦截）
+              <div className="text-[11px] font-normal text-slate-400">阻断漂移链 + 记动作审计</div>
+            </button>
+          </div>
+          <div className="mt-2 text-[11px] text-slate-400">
+            LLM 判定失败时自动放行（fail-open）——危险工具黑名单/白名单仍在前兜底。
+          </div>
+        </div>
+
+        {/* LLM 配置（留空 = 复用交叉验证） */}
+        <div className="rounded-lg border border-slate-200 p-3">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="text-xs font-medium text-slate-600">判定模型（可选覆盖）</span>
+            <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-600">
+              {sourceHint}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">Base URL</label>
+              <input
+                value={baseUrl}
+                onChange={(e) => setBaseUrl(e.target.value)}
+                className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">
+                API Key{config?.api_key_set ? `（已设 ${config.api_key_masked}）` : ''}
+              </label>
+              <input
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                type="password"
+                placeholder="留空 = 保留/复用"
+                className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">模型名称</label>
+              <input
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm"
+              />
+            </div>
+          </div>
+          <div className="mt-2 text-[11px] text-slate-400">
+            三个字段留空即复用上方「L4 交叉验证」的模型配置——只需开一个开关。相同轨迹 5 分钟内缓存结论，不重复调用。
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => saveMut.mutate()}
+            disabled={saveMut.isPending}
+            className="inline-flex items-center gap-1.5 rounded-md bg-brand-500 px-4 py-1.5 text-sm text-white hover:bg-brand-600 disabled:opacity-50"
+          >
+            {saveMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+            保存配置
           </button>
           {saveMut.isError && <span className="text-xs text-rose-500">保存失败，请重试</span>}
           {saved && <span className="text-xs text-emerald-600">✓ 已保存，立即生效</span>}

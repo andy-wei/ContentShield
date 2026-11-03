@@ -333,6 +333,30 @@ export const api = {
     return data
   },
 
+  // ---- 行为对齐（AlignmentCheck）配置 ----
+  getAlignmentCheckConfig: async (): Promise<{
+    enabled: boolean
+    action: 'warn' | 'block'
+    base_url: string
+    api_key_masked: string
+    api_key_set: boolean
+    model: string
+    source_hint: string
+  }> => {
+    const { data } = await http.get('/api/config/alignment-check')
+    return data
+  },
+  updateAlignmentCheckConfig: async (req: {
+    enabled: boolean
+    action: 'warn' | 'block'
+    base_url: string
+    api_key: string
+    model: string
+  }) => {
+    const { data } = await http.put('/api/config/alignment-check', req)
+    return data
+  },
+
   // ---- 威胁建模 LLM 配置 ----
   getThreatModelConfig: async (): Promise<{
     enabled: boolean

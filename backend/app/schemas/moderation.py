@@ -1,4 +1,5 @@
 """审核相关的请求/响应模型。"""
+
 from __future__ import annotations
 
 from typing import Literal
@@ -26,7 +27,10 @@ class ModerationRequest(BaseModel):
 class LayerResult(BaseModel):
     """单层检测结果。"""
 
-    name: str = Field(..., description="层名 lexicon/prompt_guard/llama_guard/dlp/indirect_injection")
+    name: str = Field(
+        ...,
+        description="层名 lexicon/prompt_guard/llama_guard/dlp/indirect_injection/cross_verify/code_shield",
+    )
     hit: bool = Field(False, description="是否命中")
     decision: Literal["pass", "warn", "modify", "block", "skipped"] = "pass"
     # 命中详情（每层结构不同，灵活 dict）
@@ -42,7 +46,5 @@ class ModerationResponse(BaseModel):
     layers: dict[str, LayerResult]
     categories: list[str] = Field(default_factory=list)
     explanations: list[str] = Field(default_factory=list)
-    modified_text: str | None = Field(
-        None, description="脱敏后文本（仅 modify 决策时返回）"
-    )
+    modified_text: str | None = Field(None, description="脱敏后文本（仅 modify 决策时返回）")
     latency_ms: int = 0

@@ -7,17 +7,19 @@
   GET  /api/config/security             读取安全策略配置
   PUT  /api/config/security             更新安全策略配置
   GET  /api/config/security/status      限流/锁定状态概览
+  GET  /api/config/code-shield          读取代码安全（L5）配置
+  PUT  /api/config/code-shield          更新代码安全配置
 """
+
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db import get_session
 from ..services.config_service import config_service
 
 logger = logging.getLogger(__name__)
@@ -80,7 +82,9 @@ async def update_cross_verify_config(req: CrossVerifyConfig):
 
     API Key 为空字符串时保留已有值（不覆盖）。
     """
-    await config_service.set("cross_verify.enabled", str(req.enabled).lower(), description="L4 交叉验证开关")
+    await config_service.set(
+        "cross_verify.enabled", str(req.enabled).lower(), description="L4 交叉验证开关"
+    )
     await config_service.set("cross_verify.base_url", req.base_url, description="交叉验证端点")
     await config_service.set("cross_verify.model", req.model, description="交叉验证模型")
 
@@ -114,7 +118,12 @@ async def test_cross_verify_connection(req: CrossVerifyConfig):
                 f"{base_url}/chat/completions",
                 json={
                     "model": model,
-                    "messages": [{"role": "user", "content": 'Reply with exactly: {"unsafe":false,"categories":[],"reason":"test ok"}'}],
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": 'Reply with exactly: {"unsafe":false,"categories":[],"reason":"test ok"}',
+                        }
+                    ],
                     "max_tokens": 30,
                     "temperature": 0,
                 },
@@ -127,10 +136,10 @@ async def test_cross_verify_connection(req: CrossVerifyConfig):
 
         if resp.status_code == 200:
             data = resp.json()
-            content = (
-                data.get("choices", [{}])[0].get("message", {}).get("content", "")[:80]
+            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")[:80]
+            return TestResult(
+                success=True, latency_ms=latency, detail=f"连接成功，模型回复: {content}"
             )
-            return TestResult(success=True, latency_ms=latency, detail=f"连接成功，模型回复: {content}")
         else:
             return TestResult(
                 success=False,
@@ -143,6 +152,7 @@ async def test_cross_verify_connection(req: CrossVerifyConfig):
 
 
 # ---- 安全策略配置 ----
+
 
 class SecurityConfig(BaseModel):
     """安全策略配置（限流 + 暴力破解防护）。"""
@@ -212,3 +222,104 @@ async def update_dangerous_tools(req: dict):
     await config_service.reload()
     logger.info("Dangerous tools blacklist updated: %s", tools_str)
     return {"custom": [t.strip() for t in tools_str.split(",") if t.strip()]}
+
+
+# ---- 威胁建模 LLM 配置 ----
+
+
+class ThreatModelConfig(BaseModel):
+    """威胁建模 LLM 配置（API Key 写入时明文，读取时脱敏）。"""
+
+    enabled: bool = Field(False, description="是否启用威胁建模 LLM 生成")
+    base_url: str = Field("https://api.openai.com/v1", description="OpenAI 兼容端点")
+    api_key: str = Field("", description="API Key（留空表示不修改已有值）")
+    model: str = Field("gpt-4o-mini", description="模型名称")
+
+
+class ThreatModelConfigRead(BaseModel):
+    """威胁建模配置读取（API Key 脱敏）。"""
+
+    enabled: bool
+    base_url: str
+    api_key_masked: str = Field("", description="脱敏的 API Key")
+    api_key_set: bool = Field(False, description="是否已设置 API Key")
+    model: str
+
+
+@router.get("/threat-model", response_model=ThreatModelConfigRead)
+async def get_threat_model_config():
+    """读取威胁建模 LLM 配置（API Key 脱敏）。"""
+    enabled = await config_service.get_bool("threat_model.enabled")
+    base_url = await config_service.get(
+        "threat_model.base_url", default="https://api.openai.com/v1"
+    )
+    model = await config_service.get("threat_model.model", default="gpt-4o-mini")
+    api_key = await config_service.get("threat_model.api_key")
+
+    if api_key:
+        masked = api_key[:3] + "***" + api_key[-4:] if len(api_key) > 8 else "***"
+    else:
+        masked = ""
+
+    return ThreatModelConfigRead(
+        enabled=enabled,
+        base_url=base_url,
+        api_key_masked=masked,
+        api_key_set=bool(api_key),
+        model=model,
+    )
+
+
+@router.put("/threat-model", response_model=ThreatModelConfigRead)
+async def update_threat_model_config(req: ThreatModelConfig):
+    """更新威胁建模 LLM 配置。API Key 为空时保留已有值。"""
+    await config_service.set(
+        "threat_model.enabled", str(req.enabled).lower(), description="威胁建模 LLM 开关"
+    )
+    await config_service.set("threat_model.base_url", req.base_url, description="威胁建模端点")
+    await config_service.set("threat_model.model", req.model, description="威胁建模模型")
+    if req.api_key:
+        await config_service.set(
+            "threat_model.api_key", req.api_key, secret=True, description="威胁建模 API Key"
+        )
+    await config_service.reload()
+    return await get_threat_model_config()
+
+
+# ---- 代码安全（L5 CodeShield）配置 ----
+
+
+class CodeShieldConfig(BaseModel):
+    """L5 代码安全检测配置（规则内置，仅开关 + 动作可配）。"""
+
+    enabled: bool = Field(False, description="是否启用 L5 代码安全检测")
+    action: Literal["warn", "block"] = Field(
+        "warn", description="命中危险代码原语时的动作：warn 仅告警 / block 拦截"
+    )
+
+
+@router.get("/code-shield", response_model=CodeShieldConfig)
+async def get_code_shield_config():
+    """读取 L5 代码安全检测配置。"""
+    action = await config_service.get("code_shield.action", default="warn")
+    # 容错：非法值回退为 warn
+    if action not in ("warn", "block"):
+        action = "warn"
+    return CodeShieldConfig(
+        enabled=await config_service.get_bool("code_shield.enabled"),
+        action=action,  # type: ignore[arg-type]
+    )
+
+
+@router.put("/code-shield", response_model=CodeShieldConfig)
+async def update_code_shield_config(req: CodeShieldConfig):
+    """更新 L5 代码安全检测配置（立即生效，无需重启）。"""
+    await config_service.set(
+        "code_shield.enabled", str(req.enabled).lower(), description="L5 代码安全开关"
+    )
+    await config_service.set(
+        "code_shield.action", req.action, description="L5 代码安全动作 warn/block"
+    )
+    await config_service.reload()
+    logger.info("CodeShield config updated: enabled=%s action=%s", req.enabled, req.action)
+    return req

@@ -2,6 +2,7 @@
 
 组装路由、中间件、生命周期事件。各模块在后续步骤补充后取消注释挂载。
 """
+
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -21,21 +22,58 @@ async def lifespan(app: FastAPI):
     from .services.config_service import config_service
 
     await config_service.reload()
-    await config_service.ensure_defaults({
-        "security.oauth_max_attempts": "5",
-        "security.oauth_lockout_minutes": "15",
-        "security.rate_limit_oauth": "10",
-        "security.rate_limit_api": "60",
-        "security.rate_limit_admin": "120",
-        "security.admin_token_required": "false",
-        "security.dangerous_tools": "",
-    })
+    await config_service.ensure_defaults(
+        {
+            "security.oauth_max_attempts": "5",
+            "security.oauth_lockout_minutes": "15",
+            "security.rate_limit_oauth": "10",
+            "security.rate_limit_api": "60",
+            "security.rate_limit_admin": "120",
+            "security.admin_token_required": "false",
+            "security.dangerous_tools": "",
+            "code_shield.enabled": "false",
+            "code_shield.action": "warn",
+        }
+    )
+    # seed 默认扫描门禁策略
+    await _ensure_default_scan_policy()
+    # seed OWASP LLM Top 10 审计 checklist
+    await _ensure_checklist_seeded()
     # 延迟导入，避免循环依赖
     from .engine.orchestrator import orchestrator
 
     await orchestrator.warmup()
     yield
     await orchestrator.shutdown()
+
+
+async def _ensure_default_scan_policy() -> None:
+    """确保存在一个默认扫描门禁策略（首次启动时 seed）。"""
+    from sqlalchemy import select
+
+    from .db import async_session
+    from .models.scan import ScanPolicy
+
+    async with async_session() as session:
+        existing = await session.execute(
+            select(ScanPolicy).where(ScanPolicy.is_default == 1).limit(1)
+        )
+        if existing.scalar_one_or_none():
+            return
+        # 默认策略：critical>0 或 high>5 阻断（CI 友好的默认值）
+        session.add(
+            ScanPolicy(
+                name="default",
+                description="默认策略：存在 Critical 漏洞或超过 5 个 High 漏洞时阻断",
+                max_critical=0,
+                max_high=5,
+                max_medium=-1,
+                max_low=-1,
+                max_info=-1,
+                is_default=1,
+            )
+        )
+        await session.commit()
 
 
 app = FastAPI(
@@ -52,6 +90,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+async def _ensure_checklist_seeded() -> None:
+    """启动时 seed OWASP LLM Top 10 审计 checklist（幂等）。"""
+    from .db import async_session
+    from .services.audit_checklist_service import ensure_checklist_seeded
+
+    async with async_session() as session:
+        await ensure_checklist_seeded(session)
 
 
 # ---- 全局限流中间件 ----
@@ -126,11 +173,17 @@ def _mount_routers() -> None:
         admin_config,
         admin_nhi,
         admin_rules,
+        audit_checklist,
+        mbom,
         moderate,
         oauth,
         proxy,
+        redteam,
+        scan,
         stats,
+        threat_model,
         tools,
+        training,
         ws,
     )
 
@@ -144,6 +197,12 @@ def _mount_routers() -> None:
     app.include_router(admin_audit.router, prefix=api_prefix)
     app.include_router(admin_nhi.router, prefix=api_prefix)
     app.include_router(admin_config.router, prefix=api_prefix)
+    app.include_router(threat_model.router, prefix=api_prefix)
+    app.include_router(scan.router, prefix=api_prefix)
+    app.include_router(training.router, prefix=api_prefix)
+    app.include_router(redteam.router, prefix=api_prefix)
+    app.include_router(audit_checklist.router, prefix=api_prefix)
+    app.include_router(mbom.router, prefix=api_prefix)
     app.include_router(ws.router)
 
 

@@ -63,7 +63,7 @@ export function Playground() {
     mutation.mutate({ text, source })
   }
 
-  const layerOrder = ['lexicon', 'prompt_guard', 'llama_guard', 'dlp', 'indirect_injection', 'cross_verify'] as const
+  const layerOrder = ['lexicon', 'prompt_guard', 'llama_guard', 'dlp', 'indirect_injection', 'cross_verify', 'code_shield'] as const
 
   return (
     <div className="space-y-6">
@@ -109,6 +109,11 @@ export function Playground() {
             placeholder="在此粘贴要检测的文本..."
             className="h-72 w-full resize-none rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
           />
+          {error && (
+            <p className="mt-2 rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-600">
+              {error}
+            </p>
+          )}
           <div className="mt-2 flex items-center justify-between">
             <span className="text-xs text-slate-400">{text.length} 字符</span>
             <button

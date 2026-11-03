@@ -75,8 +75,14 @@ export function Settings() {
       {/* L4 交叉验证配置 */}
       <CrossVerifyConfigCard />
 
+      {/* 威胁建模 LLM 配置 */}
+      <ThreatModelConfigCard />
+
       {/* 安全策略配置 */}
       <SecurityConfigCard />
+
+      {/* L5 代码安全配置 */}
+      <CodeShieldConfigCard />
 
       {/* 隐私说明 */}
       <Card title="⚠️ 隐私与数据安全说明" actions={null}>
@@ -302,6 +308,130 @@ function CrossVerifyConfigCard() {
   )
 }
 
+function ThreatModelConfigCard() {
+  const qc = useQueryClient()
+  const [enabled, setEnabled] = useState(false)
+  const [baseUrl, setBaseUrl] = useState('https://api.openai.com/v1')
+  const [apiKey, setApiKey] = useState('')
+  const [model, setModel] = useState('gpt-4o-mini')
+
+  const { data: config, isLoading } = useQuery({
+    queryKey: ['threat-model-config'],
+    queryFn: async () => {
+      const r = await api.getThreatModelConfig()
+      setEnabled(r.enabled)
+      setBaseUrl(r.base_url)
+      setModel(r.model)
+      return r
+    },
+  })
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      api.updateThreatModelConfig({ enabled, base_url: baseUrl, api_key: apiKey, model }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['threat-model-config'] })
+      setApiKey('')
+    },
+  })
+
+  if (isLoading)
+    return (
+      <Card title="威胁建模 LLM 配置">
+        <div className="text-sm text-slate-400">加载中...</div>
+      </Card>
+    )
+
+  return (
+    <Card
+      title="🧠 威胁建模 LLM 配置"
+      subtitle="调用大模型基于 STRIDE + AI 维度自动生成威胁清单。与 L4 交叉验证可共用同一模型"
+    >
+      <div className="space-y-4">
+        {/* 启用开关 */}
+        <div className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
+          <div>
+            <div className="text-sm font-medium text-slate-800">启用威胁建模 LLM 生成</div>
+            <div className="text-xs text-slate-500">
+              {config?.api_key_set
+                ? `已配置 API Key（${config.api_key_masked}）`
+                : '⚠️ 尚未配置 API Key，威胁建模页面的「LLM 生成」按钮将不可用'}
+            </div>
+          </div>
+          <button
+            onClick={() => setEnabled(!enabled)}
+            className={cn(
+              'relative h-6 w-11 rounded-full transition-colors',
+              enabled ? 'bg-brand-500' : 'bg-slate-300',
+            )}
+          >
+            <span
+              className={cn(
+                'absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform',
+                enabled ? 'translate-x-5' : 'translate-x-0.5',
+              )}
+            />
+          </button>
+        </div>
+
+        {/* 配置表单 */}
+        <div className="grid grid-cols-1 gap-3">
+          <div>
+            <label className="mb-1 block text-xs text-slate-500">Base URL（OpenAI 兼容端点）</label>
+            <input
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder="https://api.openai.com/v1"
+              className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm"
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">
+                API Key{config?.api_key_set && <span className="text-slate-400">（留空=保留已有）</span>}
+              </label>
+              <input
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                type="password"
+                placeholder={config?.api_key_set ? '••••（已设置）' : 'sk-xxx'}
+                className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm font-mono"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">模型名称</label>
+              <input
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="gpt-4o-mini"
+                className="w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm font-mono"
+              />
+            </div>
+          </div>
+          <div className="text-xs text-slate-400">
+            推荐使用推理能力强的模型（如 GPT-4o）以获得更全面的威胁分析
+          </div>
+        </div>
+
+        {/* 操作按钮 */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => saveMut.mutate()}
+            disabled={saveMut.isPending}
+            className="inline-flex items-center gap-1.5 rounded-md bg-brand-500 px-4 py-1.5 text-sm text-white hover:bg-brand-600 disabled:opacity-50"
+          >
+            {saveMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+            保存配置
+          </button>
+          {saveMut.isSuccess && (
+            <span className="text-xs text-emerald-600">✓ 已保存，配置立即生效</span>
+          )}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
 function SecurityConfigCard() {
   const [cfg, setCfg] = useState({
     oauth_max_attempts: 5,
@@ -406,6 +536,109 @@ function SecurityConfigCard() {
           >
             <CheckCircle2 size={14} />
             保存安全策略
+          </button>
+          {saved && <span className="text-xs text-emerald-600">✓ 已保存，立即生效</span>}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function CodeShieldConfigCard() {
+  const [enabled, setEnabled] = useState(false)
+  const [action, setAction] = useState<'warn' | 'block'>('warn')
+  const [saved, setSaved] = useState(false)
+
+  useQuery({
+    queryKey: ['code-shield-config'],
+    queryFn: async () => {
+      const r = await api.getCodeShieldConfig()
+      setEnabled(r.enabled)
+      setAction(r.action)
+      return r
+    },
+  })
+
+  const saveMut = useMutation({
+    mutationFn: () => api.updateCodeShieldConfig({ enabled, action }),
+    onSuccess: () => {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    },
+  })
+
+  return (
+    <Card
+      title="🔐 L5 代码安全（CodeShield）"
+      subtitle="对 LLM 生成/执行的危险代码原语（eval/exec/反序列化/密钥泄露等）做静态审计。灵感来自 Meta LlamaFirewall。默认关闭"
+    >
+      <div className="space-y-4">
+        {/* 启用开关 */}
+        <div className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
+          <div>
+            <div className="text-sm font-medium text-slate-800">启用代码安全检测</div>
+            <div className="text-xs text-slate-500">
+              开启后对检测文本中的 16 类危险代码原语做正则审计（含 RCE / 反序列化 / SSTI / 密钥泄露）
+            </div>
+          </div>
+          <button
+            onClick={() => setEnabled(!enabled)}
+            className={cn(
+              'relative h-6 w-11 rounded-full transition-colors',
+              enabled ? 'bg-brand-500' : 'bg-slate-300',
+            )}
+          >
+            <span
+              className={cn(
+                'absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform',
+                enabled ? 'translate-x-5' : 'translate-x-0.5',
+              )}
+            />
+          </button>
+        </div>
+
+        {/* 动作选择 */}
+        <div className="rounded-lg border border-slate-200 p-3">
+          <div className="mb-2 text-xs font-medium text-slate-600">命中动作</div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setAction('warn')}
+              className={cn(
+                'flex-1 rounded-md border px-3 py-2 text-sm',
+                action === 'warn'
+                  ? 'border-amber-300 bg-amber-50 text-amber-700'
+                  : 'border-slate-200 text-slate-600 hover:bg-slate-50',
+              )}
+            >
+              ⚠️ Warn（仅告警）
+              <div className="text-[11px] font-normal text-slate-400">记录命中但不拦截</div>
+            </button>
+            <button
+              onClick={() => setAction('block')}
+              className={cn(
+                'flex-1 rounded-md border px-3 py-2 text-sm',
+                action === 'block'
+                  ? 'border-rose-300 bg-rose-50 text-rose-700'
+                  : 'border-slate-200 text-slate-600 hover:bg-slate-50',
+              )}
+            >
+              🚫 Block（拦截）
+              <div className="text-[11px] font-normal text-slate-400">命中危险代码原语即拦截</div>
+            </button>
+          </div>
+          <div className="mt-2 text-[11px] text-slate-400">
+            建议初次启用选 Warn 观察误报，确认后再切 Block。规则内置不可改，覆盖：eval/exec/os.system/subprocess/pickle.loads/yaml.load/shell=True/SSTI/PEM 私钥/硬编码 token 等。
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => saveMut.mutate()}
+            disabled={saveMut.isPending}
+            className="inline-flex items-center gap-1.5 rounded-md bg-brand-500 px-4 py-1.5 text-sm text-white hover:bg-brand-600 disabled:opacity-50"
+          >
+            {saveMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+            保存配置
           </button>
           {saved && <span className="text-xs text-emerald-600">✓ 已保存，立即生效</span>}
         </div>

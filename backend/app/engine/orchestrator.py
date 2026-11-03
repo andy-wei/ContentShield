@@ -6,6 +6,7 @@
 - 否则 pass
 风险评分：综合各层 hit 与置信度，加权得到 0-1。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -18,6 +19,7 @@ from ..config import settings
 from ..db import async_session, init_db
 from ..models import AuditLog, CategoryRule, DlpRule, LexiconEntry
 from .detectors.base import BaseDetector
+from .detectors.code_shield import CodeShieldDetector
 from .detectors.cross_verify import CrossVerifyDetector
 from .detectors.dlp import BUILTIN_RULES, DlpDetector
 from .detectors.indirect_injection import IndirectInjectionDetector
@@ -37,6 +39,7 @@ LAYER_WEIGHTS = {
     "dlp": 0.3,
     "indirect_injection": 0.4,  # 间接注入权重最高（最危险）
     "cross_verify": 0.25,  # L4 交叉验证（补充意见，权重适中）
+    "code_shield": 0.3,  # L5 代码安全（危险代码原语，静态审计）
 }
 
 
@@ -60,6 +63,7 @@ class Orchestrator:
         self.dlp = DlpDetector()
         self.indirect_injection = IndirectInjectionDetector()
         self.cross_verify = CrossVerifyDetector()
+        self.code_shield = CodeShieldDetector()
         # 结果缓存（ OrderedDict 做 LRU，最多 500 条，30 秒 TTL）
         self._cache: dict[str, tuple[float, dict]] = {}
         self._cache_max = 500
@@ -74,6 +78,7 @@ class Orchestrator:
             self.dlp,
             self.indirect_injection,
             self.cross_verify,
+            self.code_shield,
         ]
 
     async def warmup(self) -> None:
@@ -103,22 +108,16 @@ class Orchestrator:
         """首次启动 seed 默认类别 / 词库 / DLP 规则（异步，复用主 engine）。"""
         async with async_session() as session:
             # 类别
-            existing_cats = set(
-                (await session.execute(select(CategoryRule.code))).scalars().all()
-            )
+            existing_cats = set((await session.execute(select(CategoryRule.code))).scalars().all())
             from .categories import CORE_ENABLED, DEFAULT_CATEGORIES
 
             for cat in DEFAULT_CATEGORIES:
                 if cat["code"] not in existing_cats:
                     is_core = cat["code"] in CORE_ENABLED
-                    session.add(
-                        CategoryRule(**cat, enabled=is_core, action="block")
-                    )
+                    session.add(CategoryRule(**cat, enabled=is_core, action="block"))
 
             # DLP 规则
-            existing_dlp = set(
-                (await session.execute(select(DlpRule.name))).scalars().all()
-            )
+            existing_dlp = set((await session.execute(select(DlpRule.name))).scalars().all())
             for rule in BUILTIN_RULES:
                 if rule["name"] not in existing_dlp:
                     session.add(DlpRule(**rule, enabled=True))
@@ -136,11 +135,7 @@ class Orchestrator:
         if not os.path.isdir(lex_dir):
             return
 
-        existing = set(
-            (await session.execute(
-                select(LexiconEntry.term, LexiconEntry.lang)
-            )).all()
-        )
+        existing = set((await session.execute(select(LexiconEntry.term, LexiconEntry.lang))).all())
 
         added = 0
         for fname in os.listdir(lex_dir):
@@ -226,6 +221,7 @@ class Orchestrator:
 
             if _time.perf_counter() - cached_time < self._cache_ttl:
                 import copy
+
                 result = copy.deepcopy(cached_result)
                 result["latency_ms"] = 0
                 result["_cached"] = True
@@ -235,7 +231,7 @@ class Orchestrator:
 
         t0 = time.perf_counter()
 
-        # 六层并行（L0/L3 本地正则，L1/L2/L1.5/L4 走网络）
+        # 七层并行（L0/L3/L5 本地正则，L1/L2/L1.5/L4 走网络）
         # 总耗时 = 最慢的那层（而非各层相加），因为 asyncio.gather 是并行
         results = await asyncio.gather(
             self.lexicon.detect(text, source=source),
@@ -244,6 +240,7 @@ class Orchestrator:
             self.dlp.detect(text, source=source),
             self.indirect_injection.detect(text, source=source),
             self.cross_verify.detect(text, source=source),
+            self.code_shield.detect(text, source=source),
         )
 
         merged = self._merge(results, text=text)
@@ -267,7 +264,6 @@ class Orchestrator:
 
     def _merge(self, results: list[DetectorResult], text: str = "") -> dict:
         """融合四层结果。若决策为 modify，生成脱敏文本。"""
-        from ..schemas.moderation import LayerResult
 
         layer_map = {r.name: r for r in results}
 
@@ -328,13 +324,13 @@ class Orchestrator:
         # （危害内容 warn 不脱敏，只有 PII/URL 等敏感信息 warn 才脱敏）
         modified_text = None
         dlp_result = layer_map.get("dlp")
-        if text and (decision == "modify" or (decision == "warn" and dlp_result and dlp_result.hit)):
+        if text and (
+            decision == "modify" or (decision == "warn" and dlp_result and dlp_result.hit)
+        ):
             redacted, redact_hits = self.dlp.redact(text)
             if redact_hits and redacted != text:
                 modified_text = redacted
-                explanations.append(
-                    f"L3 DLP: 已脱敏 {len(redact_hits)} 处敏感信息，转发脱敏后文本"
-                )
+                explanations.append(f"L3 DLP: 已脱敏 {len(redact_hits)} 处敏感信息，转发脱敏后文本")
 
         return {
             "decision": decision,
@@ -365,6 +361,10 @@ class Orchestrator:
             cat_name = hit.extra.get("category_name", cat)
             reason = hit.extra.get("reason", "")
             return f"L4 交叉验证: {cat_name}（{reason}）"
+        if layer == "code_shield":
+            severity = hit.extra.get("severity", "")
+            rule_name = hit.extra.get("rule_name", cat)
+            return f"L5 CodeShield: 命中危险代码原语「{rule_name}」（{severity}，{hit.snippet}）"
         return f"{layer}: {cat}"
 
     async def _write_audit(
@@ -405,7 +405,6 @@ class Orchestrator:
 
     def _redact_text(self, text: str) -> str:
         """对原文中的 PII/密钥片段打码。"""
-        import re
 
         redacted = text
         for pattern, _name, _cat, _act, _w in self.dlp._rules:  # noqa: SLF001

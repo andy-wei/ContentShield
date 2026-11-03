@@ -45,6 +45,7 @@ export const layerLabel: Record<string, string> = {
   dlp: 'L3 DLP 防泄露',
   indirect_injection: 'L1.5 间接注入',
   cross_verify: 'L4 交叉验证',
+  code_shield: 'L5 代码安全',
 }
 
 /** 风险评分颜色。 */

@@ -4,7 +4,7 @@
 
 ### AI 安全策略引擎与网关 — 用 AI 保护 AI
 
-基于 Llama-Guard-4-12B 的内容安全系统，提供 6 层纵深防御检测、双向拦截脱敏、动态身份管理与 OpenAI 兼容网关代理。
+基于 Llama-Guard-4-12B 的内容安全系统，提供 7 层纵深防御检测、双向拦截脱敏、动态身份管理与 OpenAI 兼容网关代理。
 
 [快速开始](#-快速开始) · [系统架构](#-系统架构) · [对接指南](#-与其他系统对接) · [API 文档](#-api-参考)
 
@@ -21,15 +21,24 @@
 | **复杂攻击** | 提示词注入、越狱、恶意代码生成、间接注入 | L1 Prompt Guard + L1.5 间接注入 + L2 Llama-Guard + L4 交叉验证 |
 | **HAP** | 仇恨、滥用、脏话 | L0 词库 + L2 Llama-Guard + L4 交叉验证 |
 | **机密泄露** | PII、API Key、信用卡、身份证号 | L3 DLP（检测 + 动态脱敏） |
+| **危险代码** | LLM 生成/执行 eval、exec、反序列化、SSTI 等代码原语 | L5 CodeShield（静态审计，灵感来自 Meta LlamaFirewall） |
 
 ### 核心能力
 
-- 🔍 **6 层纵深防御**：词库 → 注入检测 → 间接注入 → 危害分类 → DLP 防泄露 → 交叉验证
+- 🔍 **7 层纵深防御**：词库 → 注入检测 → 间接注入 → 危害分类 → DLP 防泄露 → 交叉验证 → 代码安全审计
 - 🛡️ **AI 网关代理**：OpenAI 兼容，双向拦截（输入 + 输出），自动脱敏改写
+- 🤖 **Agent 运行时安全**：工具白名单过滤、危险动作拦截、全量工具调用审计
+- 🎯 **威胁建模**：STRIDE + AI 专属维度，LLM 自动生成威胁，控制层证据联动（建模→控制→实际拦截闭环）
+- 🔎 **DevSecOps 扫描平台**：编排 bandit/gitleaks/trivy/pip-audit/npm-audit，异步任务队列（Celery+Redis），CI 门禁，漏洞聚合去重与可视化
+- 📊 **训练数据安全**：数据集投毒检测（5 类模式）+ PII/有害内容扫描，复用 7 层检测引擎，数据集版本溯源与差异分析
+- ⚔️ **红队对抗测试**：自动化攻击生成（预设/模板/LLM）+ Llama-Guard 作为 judge + ASR 评估 + 成员推理攻击（MIA），LLM 安全防御量化评估
+- 📦 **模型供应链（MBOM）**：模型物料清单，SHA256 完整性校验，License 合规检查，供应链风险评估，依赖关系追踪
 - 🔐 **NHI 动态身份**：OAuth 2.0 令牌、Fernet 加密保险库、按身份隔离上游凭据
 - 🧠 **交叉验证**：接入通用大模型（GPT-4o/Claude/DeepSeek）补 Llama-Guard 盲区
-- 🎛️ **可视化管理**：策略配置、审计日志、身份管理、统计仪表盘
+- 🧱 **代码安全审计（L5 CodeShield）**：对 LLM 生成/执行代码中的危险原语（eval/exec/反序列化/SSTI/密钥泄露）做静态审计，与 L4 正交互补（L4 管"恶意代码请求"，L5 管"生成的危险代码"），灵感来自 Meta LlamaFirewall，默认关闭、UI 可配 warn/block
+- 🎛️ **可视化管理**：策略配置、审计日志、身份管理、威胁建模、安全扫描、训练数据、统计仪表盘
 - 🐳 **一键部署**：Docker Compose，支持 cloud / GPU / CPU / Apple Silicon
+- ✅ **工程化基座**：pytest + vitest 测试覆盖核心安全逻辑，GitHub Actions CI，ruff + eslint 代码质量门禁
 
 ---
 
@@ -40,7 +49,7 @@
                       │
                       ▼
             ┌─────────────────────┐
-            │   6 层检测流水线     │
+            │   7 层检测流水线     │
             │                     │
             │  L0  词库检测        │  脏话/辱骂（微秒级）
             │  L1  Prompt Guard   │  注入/越狱（毫秒级）
@@ -48,6 +57,7 @@
             │  L2  Llama-Guard-4  │  S1-S14 危害分类（秒级）
             │  L3  DLP 防泄露      │  PII/密钥/信用卡/URL
             │  L4  交叉验证        │  通用大模型补充意见
+            │  L5  CodeShield     │  危险代码原语静态审计
             │                     │
             │  融合决策：          │
             │  block / modify /   │
@@ -75,6 +85,7 @@
 | **L2** | Llama-Guard-4-12B | S1-S14 内容危害分类 | 秒级 | block/warn |
 | **L3** | DLP 正则 | PII/API Key/信用卡/URL 泄露 | 微秒级 | block/modify |
 | **L4** | 通用大模型（可选） | HAP/恶意代码/越狱（交叉验证） | 秒级 | warn |
+| **L5** | CodeShield 正则（灵感来自 Meta LlamaFirewall） | 生成/执行代码中的危险原语：eval/exec/os.system/subprocess/反序列化/SSTI/PEM 私钥/硬编码 token（16 条内置规则） | 微秒级 | warn/block（UI 可配） |
 
 ### 四种决策动作
 
@@ -260,12 +271,36 @@ agent.chat(search_result)
 
 | 端点 | 用途 |
 |---|---|
-| `/api/nhi/principals` | NHI 身份 CRUD |
+| `/api/nhi/principals` | NHI 身份 CRUD（含工具白名单配置） |
 | `/api/rules/categories` | 危害类别开关 |
 | `/api/rules/lexicon` | 敏感词库管理 |
 | `/api/rules/dlp` | DLP 正则规则管理 |
 | `/api/config/cross-verify` | L4 交叉验证配置（UI 可改） |
+| `/api/config/code-shield` | L5 代码安全配置（开关 + warn/block 动作，UI 可改） |
+| `/api/config/security` | 安全策略（限流阈值/爆破防护/管理鉴权开关） |
+| `/api/config/dangerous-tools` | 危险工具黑名单管理 |
+| `/api/config/threat-model` | 威胁建模 LLM 配置 |
+| `/api/threat-model/*` | 威胁建模全套 CRUD（项目/资产/威胁/控制/LLM 生成/证据） |
+| `/api/audit-checklist` | OWASP LLM Top 10 审计 checklist（查询/状态更新/摘要） |
+| `/api/scan/targets` | 扫描目标管理（git/path/image） |
+| `/api/scan/jobs` | 触发/查询扫描任务（Celery 异步） |
+| `/api/scan/jobs/{id}/findings` | 漏洞 finding 分页查询（按严重度/工具过滤） |
+| `/api/scan/jobs/{id}/gate` | CI 门禁判定（pass/fail） |
+| `/api/scan/policies` | 门禁策略 CRUD |
+| `/api/scan/upload` | CI 端上传扫描结果 |
+| `/api/training/datasets` | 训练数据集上传与管理（JSONL/CSV/TXT） |
+| `/api/training/datasets/{id}/scan` | 触发数据集安全扫描（复用 7 层引擎 + 投毒检测） |
+| `/api/training/scans/{id}/findings` | 问题样本查询（按问题类型/投毒类型过滤） |
+| `/api/training/scans/{id}/report` | 扫描报告（问题分布、风险分布、Top 样本） |
+| `/api/redteam/campaigns` | 红队对抗测试活动管理 |
+| `/api/redteam/campaigns/{id}/results` | 攻击结果查询（含 ASR 统计） |
+| `/api/redteam/campaigns/{id}/report` | 红队报告（ASR、类别分布、成功攻击、风险洞察） |
+| `/api/mbom/artifacts` | 模型制品登记与管理 |
+| `/api/mbom/artifacts/{id}/verify` | 模型文件完整性校验 |
+| `/api/mbom/artifacts/{id}/risk` | 供应链风险评估 |
+| `/api/mbom/export` | MBOM 完整导出（CycloneDX-like） |
 | `/api/audit` | 审计日志查询 + CSV 导出 |
+| `/api/audit/agent-actions` | Agent 工具调用审计 |
 | `/api/stats/*` | 统计仪表盘数据 |
 
 ### 检测响应示例
@@ -283,13 +318,228 @@ agent.chat(search_result)
     "llama_guard":   {"hit": false, "decision": "pass"},
     "dlp":           {"hit": true,  "decision": "modify"},
     "indirect_injection": {"hit": false, "decision": "skipped"},
-    "cross_verify":  {"hit": false, "decision": "skipped"}
+    "cross_verify":  {"hit": false, "decision": "skipped"},
+    "code_shield":   {"hit": false, "decision": "skipped"}
   },
   "latency_ms": 52
 }
 ```
 
 完整 API 文档：启动后访问 `http://localhost:8000/docs`（Swagger UI）。
+
+---
+
+## 📋 OWASP LLM Top 10 审计 Checklist
+
+把 [OWASP Top 10 for LLM Applications (2025)](https://genai.owasp.org/) 的 10 类风险固化为可逐项审计的 checklist，每项含审计要点、检查方法、对应检测层、状态跟踪。
+
+### 覆盖的 10 类风险
+
+| 编号 | 风险 | 对应检测层 | 检查方法 |
+|---|---|---|---|
+| LLM01 | Prompt Injection（提示注入） | L1 Prompt Guard | 代码审计 |
+| LLM02 | Sensitive Information Disclosure（信息泄露） | L3 DLP | 代码审计 |
+| LLM03 | Supply Chain（供应链） | MBOM | 工具扫描 |
+| LLM04 | Data and Model Poisoning（数据投毒） | 训练数据扫描 | 工具扫描 |
+| LLM05 | Improper Output Handling（输出处理不当） | L2 Llama-Guard | 代码审计 |
+| LLM06 | Excessive Agency（过度代理） | 工具白名单 | 代码审计 |
+| LLM07 | System Prompt Leakage（系统提示泄露） | L1 Prompt Guard | 渗透测试 |
+| LLM08 | Vector and Embedding Weaknesses（向量弱点） | 间接注入检测 | 代码审计 |
+| LLM09 | Misinformation（错误信息/幻觉） | L4 交叉验证 | 代码审计 |
+| LLM10 | Unbounded Consumption（无界消耗/DoS） | 限流 | 配置检查 |
+
+### 审计流程
+
+每项 checklist 状态流转：`pending`（待审计）→ `pass`（通过）/ `fail`（不通过）/ `na`（不适用），记录审计证据与审计人。系统启动时自动 seed 这 10 项（幂等），并提供通过率摘要（排除 na 项）。
+
+每项的审计要点直接对应可操作的检查项，如 LLM01 的要点包括"间接注入：工具返回内容是否经过检测后再喂给 LLM"、"系统 prompt 是否与用户输入严格分离"等。
+
+---
+
+## 🔎 DevSecOps 扫描平台
+
+DevSecOps 扫描平台编排开源安全工具（bandit/gitleaks/trivy/pip-audit/npm-audit），覆盖 SAST、SCA、密钥扫描、镜像扫描、IaC 配置检测，提供统一的漏洞聚合、去重、CI 门禁与可视化。
+
+### 架构
+
+```
+CI/手动触发
+    │
+    ▼
+POST /api/scan/jobs ──► Celery Worker ──► 拉取目标(git clone/路径/镜像)
+                          │
+                          ▼
+                    依次跑各工具适配器
+                    (bandit/gitleaks/trivy/pip-audit/npm)
+                          │
+                          ▼
+                    跨工具去重 + 指纹计算
+                          │
+                          ▼
+                    落库 Finding + 回填统计
+                          │
+                          ▼
+GET /api/scan/jobs/{id}/gate ──► 门禁判定(pass/fail)
+```
+
+### 工具覆盖
+
+| 工具 | 类别 | 检测内容 |
+|---|---|---|
+| bandit | SAST | Python 静态安全反模式（subprocess shell、eval、硬编码密码等） |
+| semgrep | SAST | 多语言 SAST（预留） |
+| gitleaks | secret | 代码中的密钥/凭证泄露（API Key、Token、私钥） |
+| trivy | container/config/secret | 容器镜像漏洞 + IaC 配置问题 + 密钥扫描 |
+| pip-audit | SCA | Python 依赖已知 CVE |
+| npm audit | SCA | 前端依赖已知 CVE |
+
+### CI 集成（cs-scan CLI）
+
+`cs-scan` 在 CI 本地跑工具，把结果上传到平台并查询门禁：
+
+```bash
+# 安装
+pip install -e "./backend[dev]"
+
+# 跑扫描并上传 + 门禁判定（失败则退出码 1）
+cs-scan --target . --tools bandit,gitleaks,pip-audit \
+        --server http://contentshield:8000 --gate
+```
+
+GitHub Actions 集成（仓库自带 Action）：
+
+```yaml
+- uses: ./.github/actions/cs-scan
+  with:
+    target: .
+    tools: bandit,gitleaks,pip-audit
+    server: ${{ secrets.CS_SERVER_URL }}
+    gate: true
+```
+
+### 门禁策略
+
+默认策略：存在 Critical 漏洞或超过 5 个 High 漏洞时阻断 CI。可在 UI「安全扫描」页或 `/api/scan/policies` 自定义各严重度阈值。
+
+---
+
+## 📊 训练数据安全扫描
+
+对 LLM 训练/微调/知识库数据集进行安全扫描，检测投毒样本、PII 泄露、有害内容。**核心架构亮点：复用运行时 7 层检测引擎**——同一套检测能力服务推理（运行时）和训练（数据集），避免两套独立系统。
+
+### 检测能力
+
+| 检测项 | 来源 | 说明 |
+|---|---|---|
+| **PII 泄露** | 复用 L3 DLP | 手机号/身份证/API Key/信用卡/邮箱 |
+| **有害内容** | 复用 L2 Llama-Guard | S1-S14 危害分类 |
+| **注入攻击** | 复用 L1 Prompt Guard | 提示词注入/越狱 |
+| **投毒：指令注入** | 训练专属 | "忽略之前指令"等注入语句 |
+| **投毒：角色覆盖** | 训练专属 | 伪造 system 角色标记 |
+| **投毒：隐蔽触发词** | 训练专属 | 零宽字符/base64/hex 编码块 |
+| **投毒：重复模式** | 训练专属 | 同一短语重复 ≥5 次（强化学习信号） |
+| **投毒：格式异常** | 训练专属 | 超长单行/控制字符比例异常 |
+
+### 数据集溯源
+
+- **样本哈希**：每条样本 SHA256，用于跨次扫描去重与溯源
+- **数据集指纹**：所有样本哈希的聚合哈希，用于版本对比
+- **版本差异**：对比两个版本的新增/删除/修改样本
+
+### 支持格式
+
+- **JSONL**：每行一个 JSON，提取 `text`/`content`/`messages`/`prompt+completion` 字段
+- **CSV**：每行一条记录，提取 `text`/`content`/`prompt` 等列
+- **TXT**：每行一条记录
+
+---
+
+## ⚔️ LLM 红队对抗测试
+
+自动化探测目标 LLM 的安全弱点，量化评估模型的越狱防御能力。**核心架构亮点：复用 Llama-Guard 作为 judge**——攻击生成 + 推理检测引擎作为裁判，形成"攻击→目标→判定"闭环。
+
+### 工作流程
+
+```
+攻击生成器 ──► 攻击 prompt ──► 目标 LLM ──► 回复 ──► Llama-Guard judge
+     │                                                    │
+     │                                                    ▼
+     │                                           unsafe? (越狱成功)
+     │                                                    │
+     ▼                                                    ▼
+三类来源                                          ASR = 成功数/总数
+1. 预设测试集（HarmBench/AdvBench 子集）
+2. 参数化模板（DAN/角色扮演/base64/payload splitting）
+3. LLM 自动红队（基于目标回复迭代生成更强攻击）
+```
+
+### 攻击类别
+
+| 类别 | 说明 | 示例策略 |
+|---|---|---|
+| **jailbreak** | 越狱 | DAN、角色扮演、FreedomGPT、fictional framing |
+| **prompt_injection** | 提示注入 | system override、payload splitting |
+| **social_engineering** | 社会工程 | 权威伪装、grandma exploit、prefix injection |
+| **encoding** | 编码绕过 | base64、translation bypass |
+| **harmful_request** | 直接有害请求 | 安全研究伪装 |
+
+### ASR 评估
+
+- **ASR（Attack Success Rate）**= 成功越狱数 / 总攻击数
+- judge 判定：目标回复被 Llama-Guard 判为 `block` 或 `warn` → 攻击成功
+- 按类别统计 ASR，识别最脆弱的攻击维度
+- 多次 campaign 对比可评估模型安全改进趋势
+
+### 成员推理攻击（Membership Inference Attack, MIA）
+
+评估模型是否泄露**训练数据的成员关系**——攻击者通过观察模型响应，判断某条数据是否参与了训练。
+
+**原理**：模型对训练时见过的数据（member）会产生更自信的响应（更短、措辞更确定）。即使不返回 logprob，响应特征也是有效的代理信号。
+
+**流程**：
+1. 发送 20 个探针（10 个高频通用句作为 member，10 个独特/特定句作为 non-member）
+2. 提取每个响应的隐私特征（长度、确定性启发式分数、延迟）
+3. 统计分析：计算 **MI Advantage**（攻击者通过响应特征区分 member 的准确率超出随机猜测的部分）
+4. 风险分级：low（<5%）/ medium / high / critical（>25%）
+
+```
+50% MI Advantage = 完全无法区分 = 模型防御好（理想）
+>50% = 存在隐私泄露，训练数据可被推断
+```
+
+**防御启示**：差分隐私训练（DP-SGD）、置信度屏蔽（温度平滑）、模型蒸馏。
+
+API：`POST /api/redteam/membership-inference` 发起，`GET /api/redteam/membership-inference/{id}` 查询结果。
+
+---
+
+## 📦 模型供应链安全（MBOM）
+
+模型物料清单（Model Bill of Materials），类比 SBOM 但面向 AI 模型，覆盖部署供应链安全：来源验证、哈希完整性、License 合规、风险评估。
+
+### 安全维度
+
+| 维度 | 检测内容 | 风险评分 |
+|---|---|---|
+| **来源** | HuggingFace / 内部 / 自定义，验证上传者可信度 | +10~30 |
+| **完整性** | SHA256 哈希校验，检测文件是否被篡改 | +20(未校验)~40(篡改) |
+| **License** | 合规检查：宽松(MIT/Apache) / 注意(Llama) / 限制(GPL/NC) / 未知 | +10~25 |
+| **签名** | cosign 等工具签名验证 | +15(未签名)~35(失败) |
+| **依赖** | 模型间依赖追踪（LoRA → base model） | — |
+
+### 完整性校验
+
+```bash
+# 登记模型时自动计算 SHA256
+POST /api/mbom/artifacts  # {name, source, file_path, ...}
+
+# 后续校验文件是否被篡改
+POST /api/mbom/artifacts/{id}/verify  # → {verified: true/false, message}
+```
+
+### 风险评估
+
+每个模型制品自动计算供应链风险分（0-100），分级 low/medium/high/critical，并给出具体的风险项与修复建议。MBOM 导出（`GET /api/mbom/export`）提供全量制品清单 + 风险摘要。
 
 ---
 
@@ -317,12 +567,18 @@ agent.chat(search_result)
 | 页面 | 功能 |
 |---|---|
 | **仪表盘** | 检测统计、趋势图、类别/层级分布 |
-| **检测台** | 粘贴文本实时测试 6 层检测 |
+| **检测台** | 粘贴文本实时测试 7 层检测 |
 | **策略配置** | 类别开关、词库管理、DLP 规则 |
-| **审计日志** | 检测记录（含身份归因）、CSV 导出 |
+| **威胁建模** | STRIDE + AI 维度威胁建模，LLM 自动生成威胁，控制层证据联动 |
+| **审计 Checklist** | OWASP LLM Top 10（2025）逐项审计，映射检测层，通过率跟踪 |
+| **安全扫描** | DevSecOps 漏洞扫描，多工具聚合，CI 门禁，finding 可视化 |
+| **训练数据** | 训练/微调数据集安全扫描，投毒检测，PII/有害内容，版本溯源 |
+| **红队测试** | LLM 对抗测试，攻击生成，Llama-Guard judge，ASR 评估 |
+| **模型供应链** | 模型物料清单（MBOM），哈希完整性，License 合规，风险评估 |
+| **审计日志** | 检测记录（含身份归因）、Agent 动作审计、CSV 导出 |
 | **网关配置** | OpenAI 兼容代理使用说明 |
-| **身份管理** | NHI 颁发、OAuth Token 测试、凭据轮转 |
-| **系统设置** | 推理后端状态、L4 交叉验证配置 |
+| **身份管理** | NHI 颁发、OAuth Token 测试、凭据轮转、工具白名单配置 |
+| **系统设置** | 推理后端状态、L4 交叉验证配置、L5 代码安全配置、安全策略（限流/爆破防护）、威胁建模 LLM 配置 |
 
 ---
 
@@ -334,32 +590,62 @@ ContentShield/
 │   └── app/
 │       ├── api/                # 路由层
 │       │   ├── moderate.py     #   检测端点
-│       │   ├── proxy.py        #   AI 网关代理
-│       │   ├── tools.py        #   工具响应检测
+│       │   ├── proxy.py        #   AI 网关代理（含 Agent 安全拦截）
+│       │   ├── tools.py        #   工具响应检测（防间接注入）
 │       │   ├── oauth.py        #   OAuth 2.0 Provider
 │       │   ├── admin_nhi.py    #   NHI 管理
 │       │   ├── admin_rules.py  #   策略管理
-│       │   ├── admin_audit.py  #   审计查询
-│       │   ├── admin_config.py #   系统配置
+│       │   ├── admin_audit.py  #   审计查询（含 Agent 动作审计）
+│       │   ├── admin_config.py #   系统配置（含安全策略/工具黑名单）
+│       │   ├── threat_model.py #   威胁建模 API（项目/资产/威胁/控制/证据）
 │       │   └── stats.py        #   统计
 │       ├── engine/             # 检测引擎
-│       │   ├── orchestrator.py #   6 层编排器
+│       │   ├── orchestrator.py #   7 层编排器
 │       │   ├── stream_processor.py  # 流式处理
-│       │   └── detectors/      #   6 个检测器
+│       │   └── detectors/      #   7 个检测器
 │       ├── inference/          # 推理后端抽象
-│       ├── security/           # 加密/JWT/黑名单
-│       ├── models/             # ORM 模型
+│       ├── security/           # 加密/JWT/黑名单/限流
+│       │   ├── tool_policy.py  #   Agent 工具白名单 + 危险动作拦截
+│       │   ├── rate_limiter.py #   滑动窗口限流 + 暴力破解锁定
+│       │   ├── jwt_service.py  #   JWT 签发与验证
+│       │   └── crypto.py       #   Fernet 加密 + 凭据生成
+│       ├── services/
+│       │   ├── config_service.py        # 动态配置（DB 持久化 + 缓存）
+│       │   ├── threat_model_service.py  # 威胁建模服务（LLM 生成 + 证据聚合）
+│       │   └── scan_service.py          # DevSecOps 扫描服务
+│       ├── scan/                        # 扫描子系统
+│       │   ├── tools/                   #   工具适配器（bandit/gitleaks/trivy/pip-audit/npm）
+│       │   ├── runner.py                #   扫描执行器（拉代码→跑工具→去重→落库）
+│       │   ├── celery_app.py            #   Celery 应用（异步任务队列）
+│       │   ├── dedup.py                 #   跨工具 finding 去重
+│       │   └── cli.py                   #   cs-scan 命令行（CI 集成）
+│       ├── training/                    # 训练数据安全子系统
+│       │   ├── dataset_scanner.py       #   批量扫描器（复用 orchestrator + 投毒检测）
+│       │   ├── poison_patterns.py       #   5 类投毒检测（注入/角色覆盖/隐蔽触发/重复/格式）
+│       │   └── provenance.py            #   数据集溯源（哈希/指纹/版本对比）
+│       ├── redteam/                     # LLM 红队对抗测试子系统
+│       │   ├── attack_generators.py     #   攻击生成（预设测试集/模板/LLM 自动红队）
+│       │   ├── judge.py                 #   评估器（复用 Llama-Guard 作为 judge）
+│       │   ├── target_client.py         #   目标模型客户端（复用 _OpenAICompatibleBackend）
+│       │   └── runner.py                #   红队执行器（生成→攻击→判定→落库）
+│       ├── mbom/                        # 模型供应链安全子系统
+│       │   └── generator.py             #   哈希/完整性/license/模型卡解析/风险评估
+│       ├── models/             # ORM 模型（threat_model / agent_action / scan / training / redteam / mbom）
 │       └── schemas/            # Pydantic 模型
+├── backend/tests/              # pytest 测试（核心安全逻辑覆盖 91-100%）
 ├── frontend/                   # React + Vite + TS + Tailwind
 │   └── src/
-│       ├── pages/              #   7 个页面
+│       ├── pages/              #   8 个页面（含威胁建模）
 │       ├── api/                #   API 封装
 │       ├── store/              #   状态管理
-│       └── components/         #   通用组件
+│       ├── components/         #   通用组件
+│       └── lib/                #   工具函数
+├── frontend/tests/             # vitest 测试（format/Card/Badge）
 ├── inference/                  # 推理服务
 │   ├── prompt_guard_server.py  #   Prompt Guard Python 服务
 │   ├── vllm/Dockerfile         #   vLLM 服务
 │   └── llama-cpp/Dockerfile    #   llama.cpp 服务
+├── .github/workflows/ci.yml    # GitHub Actions CI（后端 ruff+pytest / 前端 lint+tsc+vitest+build）
 ├── data/                       # 词库/正则规则
 ├── scripts/                    # 模型下载/启动脚本
 ├── docker-compose.yml          # 基础编排
@@ -379,9 +665,34 @@ ContentShield/
 | **Token 短生命周期** | access token 15 分钟过期，降低泄露风险 |
 | **即时撤销** | JWT 黑名单，发现异常 token 可立即拉黑 |
 | **按身份隔离上游** | 每个 NHI 可绑定不同上游凭据（OpenAI/Azure/Anthropic） |
+| **Agent 工具白名单** | 每个 NHI 独立工具白名单，危险工具（命令执行/删库/转账）内置黑名单拦截 |
+| **限流 + 暴力破解防护** | IP+路径滑动窗口限流，OAuth 端点失败计数 + 临时锁定 |
 | **审计身份归因** | 每次检测记录调用者身份（principal_id + subject） |
+| **Agent 动作审计** | 全量工具调用落库，参数自动脱敏，可查询被拦截动作 |
 | **审计 PII 打码** | 审计库不存储原始 PII，避免二次泄露 |
 | **双向脱敏** | 输入端和输出端都支持自动脱敏改写 |
+| **威胁建模证据联动** | 威胁建模的控制层映射到运行时检测层，反向聚合实际拦截数据形成闭环 |
+
+---
+
+## 🧪 工程化与质量保障
+
+项目配备了完整的质量保障基座，确保安全逻辑的正确性可被验证：
+
+| 维度 | 工具 | 覆盖范围 |
+|---|---|---|
+| **后端单测** | pytest + pytest-asyncio + pytest-cov | 核心安全模块（jwt/crypto/rate_limiter/tool_policy）覆盖率 91-100%，检测器纯逻辑 60-80%，威胁建模 LLM 解析与风险评分 |
+| **前端单测** | vitest + @testing-library/react | format.ts 纯函数、Card/Badge 组件渲染与样式 |
+| **后端 Lint** | ruff（check + format） | 风格统一 + pyflakes 真实 bug 检测 + isort 导入排序 |
+| **前端 Lint** | eslint + prettier | TypeScript 类型安全 + React Hooks 规则 + 代码格式化 |
+| **类型检查** | tsc --noEmit | 前端全量类型检查 |
+| **CI/CD** | GitHub Actions | push/PR 自动跑后端 ruff+pytest、前端 lint+tsc+vitest+build，失败阻断合并 |
+
+```bash
+# 本地一键验证（与 CI 一致）
+cd backend && ruff check app/ && ruff format app/ --check && pytest
+cd frontend && npm run lint && npx tsc --noEmit && npm run test && npm run build
+```
 
 ---
 
@@ -393,6 +704,7 @@ ContentShield/
 | 前端 | React 18 + TypeScript + Vite + TailwindCSS + Recharts |
 | 推理 | llama.cpp（Metal/CUDA）+ Python transformers（MPS） |
 | 安全 | Fernet 加密 + JWT（HS256）+ OAuth 2.0 |
+| DevSecOps | Celery + Redis 异步任务队列 + bandit/gitleaks/trivy/pip-audit |
 | 部署 | Docker Compose（多 profile） |
 
 ---

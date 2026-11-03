@@ -1,7 +1,7 @@
-/** 审计日志：列表 + 过滤 + 详情抽屉 + CSV 导出。 */
+/** 审计日志：内容审计 + 动作审计（第 3 层应用安全）。 */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Download, X } from 'lucide-react'
+import { Download, X, ShieldAlert, ScrollText } from 'lucide-react'
 import { api } from '../api/client'
 import { Card } from '../components/Card'
 import { DecisionBadge } from '../components/Badge'
@@ -11,6 +11,39 @@ import { cn, formatDateTime, formatNumber } from '../lib/format'
 const PAGE_SIZE = 20
 
 export function Audit() {
+  const [tab, setTab] = useState<'content' | 'actions'>('content')
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-xl font-bold text-slate-800">审计日志</h1>
+        <p className="mt-1 text-sm text-slate-500">内容检测审计 + Agent 动作审计（第 3 层应用安全）</p>
+      </div>
+
+      <div className="flex gap-1 border-b border-slate-200">
+        <TabButton active={tab === 'content'} onClick={() => setTab('content')} icon={ScrollText} label="内容审计" />
+        <TabButton active={tab === 'actions'} onClick={() => setTab('actions')} icon={ShieldAlert} label="动作审计" />
+      </div>
+
+      {tab === 'content' ? <ContentAudit /> : <ActionAudit />}
+    </div>
+  )
+}
+
+function TabButton({ active, onClick, icon: Icon, label }: { active: boolean; onClick: () => void; icon: React.ComponentType<{ size?: number | string }>; label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition-colors',
+        active ? 'border-brand-500 text-brand-600' : 'border-transparent text-slate-500 hover:text-slate-700',
+      )}
+    >
+      <Icon size={14} /> {label}
+    </button>
+  )
+}
+
+function ContentAudit() {
   const [page, setPage] = useState(1)
   const [decision, setDecision] = useState('')
   const [source, setSource] = useState('')
@@ -242,6 +275,91 @@ function Field({
     <div className="flex items-center justify-between">
       <span className="text-xs text-slate-500">{label}</span>
       <span className="text-sm text-slate-700">{value ?? children}</span>
+    </div>
+  )
+}
+
+/** Agent 动作审计（第 3 层应用安全）。 */
+function ActionAudit() {
+  const [blockedOnly, setBlockedOnly] = useState(false)
+  const { data } = useQuery({
+    queryKey: ['agent-actions', blockedOnly],
+    queryFn: () => api.getAgentActions({ blocked: blockedOnly || undefined, page_size: 50 }),
+  })
+
+  const items = data?.items ?? []
+  const total = data?.total ?? 0
+  const blockedCount = items.filter((i) => i.blocked).length
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4">
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-2">
+          <span className="text-2xl font-bold text-slate-800">{formatNumber(total)}</span>
+          <span className="ml-2 text-xs text-slate-500">总动作数</span>
+        </div>
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2">
+          <span className="text-2xl font-bold text-rose-600">{formatNumber(blockedCount)}</span>
+          <span className="ml-2 text-xs text-rose-500">被拦截</span>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input
+            type="checkbox"
+            checked={blockedOnly}
+            onChange={(e) => setBlockedOnly(e.target.checked)}
+            className="h-4 w-4 accent-brand-500"
+          />
+          只看被拦截的
+        </label>
+      </div>
+
+      <Card bodyClassName="p-0">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-100 text-xs text-slate-500">
+              <th className="px-4 py-2.5 text-left font-medium">时间</th>
+              <th className="px-4 py-2.5 text-left font-medium">调用者</th>
+              <th className="px-4 py-2.5 text-left font-medium">工具</th>
+              <th className="px-4 py-2.5 text-left font-medium">参数摘要</th>
+              <th className="px-4 py-2.5 text-left font-medium">状态</th>
+              <th className="px-4 py-2.5 text-left font-medium">原因</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.length === 0 && (
+              <tr>
+                <td colSpan={6} className="py-12 text-center text-sm text-slate-400">
+                  暂无动作记录（Agent 调用工具后会出现）
+                </td>
+              </tr>
+            )}
+            {items.map((item) => (
+              <tr key={item.id} className="border-b border-slate-50 hover:bg-slate-50">
+                <td className="px-4 py-2.5 text-xs text-slate-500">{formatDateTime(item.created_at)}</td>
+                <td className="px-4 py-2.5 text-xs text-slate-600">{item.subject}</td>
+                <td className="px-4 py-2.5">
+                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-mono text-slate-700">
+                    {item.tool_name}
+                  </code>
+                </td>
+                <td className="max-w-xs truncate px-4 py-2.5 text-xs text-slate-500">
+                  {item.arguments_summary || '-'}
+                </td>
+                <td className="px-4 py-2.5">
+                  {item.blocked ? (
+                    <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs text-rose-700">已拦截</span>
+                  ) : (
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">已放行</span>
+                  )}
+                </td>
+                <td className="max-w-xs truncate px-4 py-2.5 text-xs text-slate-500">
+                  {item.block_reason || '-'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
     </div>
   )
 }

@@ -3,6 +3,7 @@
 来源：https://www.llama.com/docs/model-cards-and-prompt-formats/llama-guard-4/
 描述用于构造 <CATEGORIES> 提示词。可在 UI 中覆盖 description。
 """
+
 from __future__ import annotations
 
 # (code, name, description, layer, order)
@@ -135,8 +136,7 @@ DEFAULT_CATEGORIES: list[dict] = [
         "code": "S12",
         "name": "性内容 Sexual Content",
         "description": (
-            "AI models should not generate explicit sexual content, pornography, "
-            "or erotica."
+            "AI models should not generate explicit sexual content, pornography, or erotica."
         ),
         "layer": "llama_guard",
         "order": 12,
@@ -171,11 +171,7 @@ def seed_default_categories(session_sync) -> None:
     from ..models import CategoryRule  # noqa: WPS433
 
     for cat in DEFAULT_CATEGORIES:
-        exists = (
-            session_sync.query(CategoryRule)
-            .filter(CategoryRule.code == cat["code"])
-            .first()
-        )
+        exists = session_sync.query(CategoryRule).filter(CategoryRule.code == cat["code"]).first()
         if exists:
             continue
         session_sync.add(CategoryRule(**cat, enabled=True, action="block"))

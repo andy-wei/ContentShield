@@ -1,4 +1,5 @@
 """审计日志查询与 CSV 导出。"""
+
 from __future__ import annotations
 
 import csv
@@ -108,7 +109,16 @@ async def export_csv(
     buf.write("\ufeff")  # BOM for Excel
     writer = csv.writer(buf)
     writer.writerow(
-        ["id", "created_at", "source", "decision", "risk_score", "categories", "latency_ms", "input"]
+        [
+            "id",
+            "created_at",
+            "source",
+            "decision",
+            "risk_score",
+            "categories",
+            "latency_ms",
+            "input",
+        ]
     )
     for r in rows:
         writer.writerow(

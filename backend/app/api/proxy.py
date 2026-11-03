@@ -12,6 +12,7 @@
 - post: 转发后审核模型输出
 - both: 双向审核
 """
+
 from __future__ import annotations
 
 import logging
@@ -75,7 +76,9 @@ def _apply_modifications(body: dict, user_text: str, modified: str) -> dict:
 
 async def _forward(body: dict, identity=None) -> dict:
     """转发请求到上游 LLM（非流式）。用 identity 的动态凭据。"""
-    upstream_url = (identity.upstream_base_url if identity else settings.gateway_upstream_base_url).rstrip("/")
+    upstream_url = (
+        identity.upstream_base_url if identity else settings.gateway_upstream_base_url
+    ).rstrip("/")
     upstream_key = identity.upstream_api_key if identity else settings.gateway_upstream_api_key
     async with httpx.AsyncClient(timeout=120.0) as client:
         resp = await client.post(
@@ -84,7 +87,11 @@ async def _forward(body: dict, identity=None) -> dict:
             headers={
                 "Authorization": f"Bearer {upstream_key}",
                 "Content-Type": "application/json",
-                **({"X-Subject": identity.subject} if identity and identity.is_authenticated else {}),
+                **(
+                    {"X-Subject": identity.subject}
+                    if identity and identity.is_authenticated
+                    else {}
+                ),
             },
         )
     if resp.status_code >= 400:
@@ -153,9 +160,7 @@ async def _pre_check(body: dict, identity=None) -> tuple[dict | None, dict | Non
             "categories": tool_pre["categories"],
         }
         if tool_pre["decision"] == "block":
-            logger.info(
-                "Gateway blocked (tool response #%d): %s", i, tool_pre["categories"]
-            )
+            logger.info("Gateway blocked (tool response #%d): %s", i, tool_pre["categories"])
             return (
                 _refusal_response(body.get("model", ""), "tool_injection_blocked"),
                 None,
@@ -185,7 +190,6 @@ async def _enforce_agent_security(body: dict, identity=None) -> dict | None:
     import uuid
 
     from ..db import async_session
-    from ..models.agent_action import AgentAction
     from ..models.identity import NhiPrincipal
     from ..security.tool_policy import (
         BUILTIN_DANGEROUS_TOOLS,
@@ -195,7 +199,6 @@ async def _enforce_agent_security(body: dict, identity=None) -> dict | None:
         get_allowed_tools,
     )
     from ..services.config_service import config_service
-    from sqlalchemy import select
 
     request_id = str(uuid.uuid4())[:8]
     principal_id = identity.principal_id if identity else None
@@ -223,9 +226,7 @@ async def _enforce_agent_security(body: dict, identity=None) -> dict | None:
         if dangerous_hits:
             reason = dangerous_hits[0]["reason"]
             logger.warning("Dangerous action blocked: %s by %s", reason, subject)
-            return _refusal_response(
-                body.get("model", ""), f"dangerous_action_blocked: {reason}"
-            )
+            return _refusal_response(body.get("model", ""), f"dangerous_action_blocked: {reason}")
 
     # ② 工具白名单过滤
     body, removed = enforce_tool_whitelist(body, allowed_tools)
@@ -248,7 +249,6 @@ async def _record_actions(
     blocked: bool,
 ) -> None:
     """批量记录工具调用动作到审计库。"""
-    from datetime import datetime
 
     from ..db import async_session
     from ..models.agent_action import AgentAction
@@ -317,11 +317,7 @@ async def chat_completions(
     # ---- 后置审核（输出端双向脱敏：block 拦截 + modify 脱敏改写）----
     if settings.gateway_mode in ("post", "both"):
         try:
-            assistant_text = (
-                upstream.get("choices", [{}])[0]
-                .get("message", {})
-                .get("content", "")
-            )
+            assistant_text = upstream.get("choices", [{}])[0].get("message", {}).get("content", "")
         except Exception:  # noqa: BLE001
             assistant_text = ""
         if assistant_text:

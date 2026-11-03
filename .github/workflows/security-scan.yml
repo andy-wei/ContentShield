@@ -1,0 +1,31 @@
+name: Security Scan
+
+# 在 CI 中对仓库自身运行 DevSecOps 扫描，结果上传到 ContentShield 平台。
+# 这是「DevSecOps 工具链落地」的示范：每次 PR/push 自动扫描 + 门禁。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # 允许手动触发
+  workflow_dispatch:
+
+jobs:
+  scan:
+    name: DevSecOps Scan + Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # gitleaks 需要完整历史
+
+      - name: Run ContentShield scan
+        uses: ./.github/actions/cs-scan
+        with:
+          target: .
+          tools: bandit,gitleaks,pip-audit
+          # ContentShield 平台地址（需配置为可访问的地址）
+          server: ${{ secrets.CS_SERVER_URL || 'http://localhost:8000' }}
+          gate: true
+          # 使用默认策略：critical>0 或 high>5 阻断

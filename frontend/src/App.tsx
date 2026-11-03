@@ -6,9 +6,15 @@ import { Dashboard } from './pages/Dashboard'
 import { Playground } from './pages/Playground'
 import { Rules } from './pages/Rules'
 import { Audit } from './pages/Audit'
+import { ThreatModel } from './pages/ThreatModel'
 import { Gateway } from './pages/Gateway'
 import { Identities } from './pages/Identities'
 import { Settings } from './pages/Settings'
+import { ScanJobs } from './pages/ScanJobs'
+import { Training } from './pages/Training'
+import { Redteam } from './pages/Redteam'
+import { MBOM } from './pages/MBOM'
+import { AuditChecklist } from './pages/AuditChecklist'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,6 +30,12 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="playground" element={<Playground />} />
           <Route path="rules" element={<Rules />} />
+          <Route path="threat-model" element={<ThreatModel />} />
+          <Route path="scan" element={<ScanJobs />} />
+          <Route path="training" element={<Training />} />
+          <Route path="redteam" element={<Redteam />} />
+          <Route path="mbom" element={<MBOM />} />
+          <Route path="audit-checklist" element={<AuditChecklist />} />
           <Route path="audit" element={<Audit />} />
           <Route path="gateway" element={<Gateway />} />
           <Route path="identities" element={<Identities />} />

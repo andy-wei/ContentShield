@@ -5,6 +5,7 @@
 - 开发模式（未配置 ENCRYPTION_KEY）：降级为 anonymous，不鉴权，用全局上游凭据
 - 生产模式：解析 Bearer JWT → 校验签名/过期/黑名单 → 查 NhiPrincipal → 解密上游凭据
 """
+
 from __future__ import annotations
 
 import logging

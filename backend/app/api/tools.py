@@ -15,6 +15,7 @@
         web_result = resp.modified_text  # 用脱敏后的
     # 4. 继续正常流程
 """
+
 from __future__ import annotations
 
 import logging
@@ -52,11 +53,15 @@ async def moderate_tool_response(
     if not req.content or not req.content.strip():
         raise HTTPException(status_code=400, detail="content must not be empty")
 
-    id_dict = {
-        "principal_id": identity.principal_id,
-        "subject": identity.subject,
-        "scopes": ",".join(identity.scopes),
-    } if identity else None
+    id_dict = (
+        {
+            "principal_id": identity.principal_id,
+            "subject": identity.subject,
+            "scopes": ",".join(identity.scopes),
+        }
+        if identity
+        else None
+    )
 
     try:
         result = await orchestrator.moderate(

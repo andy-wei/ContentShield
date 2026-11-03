@@ -10,10 +10,10 @@
     enabled = await config_service.get("cross_verify.enabled", default="false")
     api_key = await config_service.get("cross_verify.api_key", secret=True)
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from sqlalchemy import select
 
@@ -76,12 +76,12 @@ class ConfigService:
         val = await self.get(key, str(default).lower())
         return val.lower() in ("true", "1", "yes", "on")
 
-    async def set(self, key: str, value: str, *, secret: bool = False, description: str = "") -> None:
+    async def set(
+        self, key: str, value: str, *, secret: bool = False, description: str = ""
+    ) -> None:
         """写入配置（敏感字段加密）。"""
         async with async_session() as session:
-            existing = await session.scalar(
-                select(SystemConfig).where(SystemConfig.key == key)
-            )
+            existing = await session.scalar(select(SystemConfig).where(SystemConfig.key == key))
             if existing:
                 if secret:
                     existing.value_enc = encrypt(value) if value else ""

@@ -6,11 +6,12 @@ refresh token：长 TTL（7d），不透明随机串（SHA256 哈希入库）
 签名密钥复用 ENCRYPTION_KEY 的前 32 字节（HMAC-SHA256 需要 ≥32 字节密钥）。
 未配置 ENCRYPTION_KEY 时本模块不可用（开发模式降级 anonymous）。
 """
+
 from __future__ import annotations
 
 import hashlib
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 
@@ -41,7 +42,7 @@ def create_access_token(
 
     返回 (jwt_str, jti, expires_at)。
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_at = now + timedelta(minutes=settings.access_token_ttl_minutes)
     jti = generate_jti()
     payload = {

@@ -6,20 +6,33 @@ __pycache__/
 venv/
 .pytest_cache/
 .ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
 
 # Node
 node_modules/
 frontend/dist/
+frontend/coverage/
 
 # 数据与模型（不入库）
 data/*.db
 data/*.db-*
 backend/cs_*.db
+backend/data/*.db
+backend/data/*.db-*
 models/
+
+# 无关项目（不属于本仓库）
+pentagent/
 
 # 环境配置（含密钥，不入库）
 .env
 .env.local
+
+# 大文件 / 媒体（不入库）
+*.webm
+*.mp4
 
 # IDE
 .vscode/

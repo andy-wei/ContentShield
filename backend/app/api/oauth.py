@@ -7,10 +7,11 @@
 
 未配置 ENCRYPTION_KEY（开发模式）时，/oauth/token 返回 503。
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -29,7 +30,7 @@ from ..schemas.identity import (
 )
 from ..security import jwt_service
 from ..security.blacklist import revoke as revoke_token
-from ..security.crypto import decrypt, encrypt, hash_token
+from ..security.crypto import decrypt, hash_token
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["oauth"])
@@ -43,7 +44,7 @@ def _require_encryption() -> None:
         raise HTTPException(
             status_code=503,
             detail="NHI 加密未启用。请配置 ENCRYPTION_KEY 环境变量。"
-            "生成方法：python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\"",
+            '生成方法：python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"',
         )
 
 
@@ -82,19 +83,11 @@ async def issue_token(
         except HTTPException as e:
             if e.status_code == 401:
                 # 记录认证失败
-                max_attempts = int(
-                    await config_service.get("security.oauth_max_attempts", "5")
-                )
-                lockout_min = int(
-                    await config_service.get("security.oauth_lockout_minutes", "15")
-                )
-                triggered = rate_limiter.record_failure(
-                    lock_key, max_attempts, lockout_min * 60
-                )
+                max_attempts = int(await config_service.get("security.oauth_max_attempts", "5"))
+                lockout_min = int(await config_service.get("security.oauth_lockout_minutes", "15"))
+                triggered = rate_limiter.record_failure(lock_key, max_attempts, lockout_min * 60)
                 if triggered:
-                    logger.warning(
-                        "OAuth brute-force lockout: ip=%s", client_ip
-                    )
+                    logger.warning("OAuth brute-force lockout: ip=%s", client_ip)
                     raise HTTPException(
                         status_code=429,
                         detail=f"认证失败 {max_attempts} 次，已锁定 {lockout_min} 分钟",
@@ -110,9 +103,7 @@ async def issue_token(
         raise HTTPException(status_code=400, detail="unsupported_grant_type")
 
 
-async def _authenticate_client(
-    req: TokenRequest, session: AsyncSession
-) -> NhiPrincipal:
+async def _authenticate_client(req: TokenRequest, session: AsyncSession) -> NhiPrincipal:
     """校验 client_id + client_secret。"""
     if not req.client_id or not req.client_secret:
         raise HTTPException(status_code=400, detail="missing client_id or client_secret")
@@ -161,9 +152,7 @@ async def _create_tokens(
 
     # refresh token（不透明随机串）
     refresh_str = _gen_refresh()
-    refresh_expires = datetime.now(timezone.utc) + timedelta(
-        days=settings.refresh_token_ttl_days
-    )
+    refresh_expires = datetime.now(UTC) + timedelta(days=settings.refresh_token_ttl_days)
     session.add(
         RefreshToken(
             token_hash=hash_token(refresh_str),
@@ -189,17 +178,13 @@ def _gen_refresh() -> str:
     return secrets.token_urlsafe(48)
 
 
-async def _refresh_tokens(
-    req: TokenRequest, session: AsyncSession
-) -> TokenResponse:
+async def _refresh_tokens(req: TokenRequest, session: AsyncSession) -> TokenResponse:
     """用 refresh token 换新的 access + refresh token。"""
     if not req.refresh_token:
         raise HTTPException(status_code=400, detail="missing refresh_token")
 
     token_hash = hash_token(req.refresh_token)
-    record = await session.scalar(
-        select(RefreshToken).where(RefreshToken.token_hash == token_hash)
-    )
+    record = await session.scalar(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
     if not record or record.revoked:
         raise HTTPException(status_code=401, detail="invalid refresh_token")
     # SQLite 存的是 naive datetime，用 naive utcnow 比较
@@ -234,9 +219,7 @@ async def revoke_endpoint(
 
     # 尝试作为 refresh token
     token_hash = hash_token(req.token)
-    record = await session.scalar(
-        select(RefreshToken).where(RefreshToken.token_hash == token_hash)
-    )
+    record = await session.scalar(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
     if record:
         record.revoked = True
         await session.commit()

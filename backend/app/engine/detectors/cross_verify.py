@@ -10,6 +10,7 @@
 
 输出格式：要求模型返回结构化 JSON，容错降级为文本匹配。
 """
+
 from __future__ import annotations
 
 import json
@@ -85,9 +86,7 @@ class CrossVerifyDetector(BaseDetector):
         api_key = await config_service.get(
             "cross_verify.api_key", default=settings.cross_verify_api_key
         )
-        model = await config_service.get(
-            "cross_verify.model", default=settings.cross_verify_model
-        )
+        model = await config_service.get("cross_verify.model", default=settings.cross_verify_model)
 
         # 配置指纹（检测变更）
         fingerprint = f"{enabled}|{base_url}|{model}|{bool(api_key)}"
@@ -110,9 +109,7 @@ class CrossVerifyDetector(BaseDetector):
             model=model,
             name="cross-verify",
         )
-        logger.info(
-            "Cross-verify backend (re)built: enabled=%s model=%s", enabled, model
-        )
+        logger.info("Cross-verify backend (re)built: enabled=%s model=%s", enabled, model)
 
     def _parse_json(self, text: str) -> dict | None:
         """解析模型输出的 JSON，容错处理。
@@ -146,10 +143,7 @@ class CrossVerifyDetector(BaseDetector):
     def _fallback_text_match(self, text: str) -> dict:
         """JSON 解析失败时的降级：关键词匹配。"""
         lower = (text or "").lower()
-        unsafe = any(
-            kw in lower
-            for kw in ['"unsafe": true', "unsafe", "违规", "不安全", "威胁"]
-        )
+        unsafe = any(kw in lower for kw in ['"unsafe": true', "unsafe", "违规", "不安全", "威胁"])
         if not unsafe:
             return {"unsafe": False, "categories": [], "reason": "fallback: safe"}
         categories = []

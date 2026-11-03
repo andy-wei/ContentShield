@@ -8,6 +8,7 @@
   GET    /api/nhi/tokens                  活跃 token 列表
   POST   /api/nhi/tokens/{jti}/revoke     撤销 token
 """
+
 from __future__ import annotations
 
 import logging
@@ -25,7 +26,6 @@ from ..schemas.identity import (
     SecretRotated,
 )
 from ..security.crypto import (
-    decrypt,
     encrypt,
     generate_client_id,
     generate_client_secret,
@@ -116,9 +116,7 @@ async def rotate_secret(
     principal.client_secret_enc = encrypt(new_secret)
     await session.commit()
 
-    return SecretRotated(
-        id=principal.id, client_id=principal.client_id, client_secret=new_secret
-    )
+    return SecretRotated(id=principal.id, client_id=principal.client_id, client_secret=new_secret)
 
 
 @router.get("/principals/{principal_id}/tools")
@@ -170,9 +168,7 @@ async def list_tokens(
     stmt = select(AccessToken).order_by(AccessToken.id.desc())
     if only_active:
         now = datetime.utcnow()
-        stmt = stmt.where(
-            AccessToken.revoked.is_(False), AccessToken.expires_at >= now
-        )
+        stmt = stmt.where(AccessToken.revoked.is_(False), AccessToken.expires_at >= now)
     stmt = stmt.limit(100)
     res = await session.execute(stmt)
     return [

@@ -3,6 +3,7 @@
 主密钥从 ENCRYPTION_KEY 环境变量加载。未配置时进入"开发模式"，
 encrypt/decrypt 退化为 no-op（明文存储，仅用于本地测试）。
 """
+
 from __future__ import annotations
 
 import hashlib

@@ -14,7 +14,7 @@ name: contentshield
 
 services:
   # ---------------------------------------------------------------------------
-  # 后端 API（FastAPI）：检测编排、网关代理、规则/审计管理
+  # 后端 API（FastAPI）：检测编排、网关代理、规则/审计管理、扫描 API
   # ---------------------------------------------------------------------------
   backend:
     build:
@@ -25,6 +25,7 @@ services:
     env_file: .env
     environment:
       - PYTHONUNBUFFERED=1
+      - REDIS_URL=redis://redis:6379/0
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
@@ -32,6 +33,60 @@ services:
       - ./data:/app/data
     depends_on:
       - llama-cpp-pg
+      - redis
+    networks:
+      - cs-net
+
+  # ---------------------------------------------------------------------------
+  # Redis：Celery broker/backend + 未来限流后端
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: cs-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - cs-net
+
+  # ---------------------------------------------------------------------------
+  # Celery Worker：异步执行 DevSecOps 扫描任务
+  # 挂载 docker.sock 用于 trivy 镜像扫描；扫描产物在 worker-data
+  # ---------------------------------------------------------------------------
+  celery-worker:
+    build:
+      context: ./backend
+    image: contentshield-backend:latest
+    container_name: cs-celery-worker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REDIS_URL=redis://redis:6379/0
+      # worker 需要访问 backend 的 DB（共享 SQLite 卷）
+      - DATABASE_URL=sqlite+aiosqlite:////app/data/contentshield.db
+    command: celery -A app.scan.celery_app worker --loglevel=info --concurrency=2
+    # 覆盖 Dockerfile 的 HTTP 健康检查：worker 无 HTTP 端点，改用 celery inspect ping
+    # ping 不指定 destination 会查询所有在线 worker，单 worker 也能正常返回 pong
+    healthcheck:
+      test: ["CMD", "celery", "-A", "app.scan.celery_app", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    volumes:
+      # 共享 SQLite 数据库
+      - ./data:/app/data
+      # 扫描时拉取的代码临时存放（可选，便于排查）
+      - worker-data:/tmp/cs_scan
+      # 挂载 docker.sock 让 trivy 能扫镜像（可选）
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - redis
+      - backend
     networks:
       - cs-net
 
@@ -78,3 +133,7 @@ services:
 networks:
   cs-net:
     driver: bridge
+
+volumes:
+  redis-data:
+  worker-data:

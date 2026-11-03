@@ -7,11 +7,12 @@ OpenAI SSE 格式：
     data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n
     data: [DONE]\n\n
 """
+
 from __future__ import annotations
 
 import json
 import logging
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import httpx
 

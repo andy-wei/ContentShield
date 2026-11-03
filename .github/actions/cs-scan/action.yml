@@ -1,0 +1,66 @@
+name: 'ContentShield Security Scan'
+description: 'Run DevSecOps scan (bandit/gitleaks/pip-audit/trivy) and gate the build'
+author: 'ContentShield'
+
+inputs:
+  target:
+    description: 'Path to scan (default: current directory)'
+    required: false
+    default: '.'
+  tools:
+    description: 'Comma-separated scan tools (bandit,gitleaks,pip-audit,npm,trivy)'
+    required: false
+    default: 'bandit,gitleaks,pip-audit'
+  server:
+    description: 'ContentShield platform URL'
+    required: true
+  gate:
+    description: 'Fail the build if gate policy fails (true/false)'
+    required: false
+    default: 'true'
+  policy-id:
+    description: 'Gate policy ID (optional, uses default if omitted)'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install ContentShield + scan tools
+      shell: bash
+      run: |
+        pip install --upgrade pip
+        # 如果有 backend 目录，本地安装；否则从 PyPI（未来发布）
+        if [ -d "backend" ]; then
+          pip install -e "./backend[dev]"
+        else
+          pip install contentshield-backend bandit gitleaks pip-audit
+        fi
+        # gitleaks 需单独安装二进制（pip 不提供）
+        if ! command -v gitleaks &> /dev/null; then
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin gitleaks
+        fi
+
+    - name: Run scan
+      shell: bash
+      env:
+        CS_SERVER: ${{ inputs.server }}
+      run: |
+        args=(
+          --target "${{ inputs.target }}"
+          --tools "${{ inputs.tools }}"
+          --server "${{ inputs.server }}"
+        )
+        if [ "${{ inputs.gate }}" = "true" ]; then
+          args+=(--gate)
+        fi
+        if [ -n "${{ inputs.policy-id }}" ]; then
+          args+=(--policy-id "${{ inputs.policy-id }}")
+        fi
+        cs-scan "${args[@]}"

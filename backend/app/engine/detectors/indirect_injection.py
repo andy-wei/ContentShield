@@ -9,6 +9,7 @@
 
 仅在 source="tool_response" 时激活（不干扰正常用户输入检测）。
 """
+
 from __future__ import annotations
 
 import logging
@@ -27,9 +28,7 @@ logger = logging.getLogger(__name__)
 INDIRECT_PATTERNS: list[tuple[re.Pattern, str, str]] = [
     # 角色伪造：试图覆盖 system/user/assistant 角色
     (
-        re.compile(
-            r"(?i)\b(system|assistant)\s*[:：]\s*\S", re.MULTILINE
-        ),
+        re.compile(r"(?i)\b(system|assistant)\s*[:：]\s*\S", re.MULTILINE),
         "role-spoof",
         "block",
     ),
@@ -62,9 +61,7 @@ INDIRECT_PATTERNS: list[tuple[re.Pattern, str, str]] = [
     ),
     # Base64 编码的可疑指令（长 base64 串后跟指令性词）
     (
-        re.compile(
-            r"(?i)(decode|execute|run|follow)\s*:?\s*[A-Za-z0-9+/=]{40,}"
-        ),
+        re.compile(r"(?i)(decode|execute|run|follow)\s*:?\s*[A-Za-z0-9+/=]{40,}"),
         "base64-injection",
         "warn",
     ),
@@ -123,7 +120,7 @@ class IndirectInjectionDetector(BaseDetector):
                     hits.append(
                         DetectorHit(
                             category=f"indirect:{name}",
-                            snippet=text[max(0, m.start() - 10):m.end() + 10],
+                            snippet=text[max(0, m.start() - 10) : m.end() + 10],
                             score=0.7,
                             extra={"action": action, "matched": m.group(0)[:50]},
                         )
@@ -180,6 +177,8 @@ class IndirectInjectionDetector(BaseDetector):
             "label": label,
             "scores": scores,
             "threshold": self._threshold,
-            "pattern_hits": sum(1 for h in hits if h.category.startswith("indirect:") and "pg-" not in h.category),
+            "pattern_hits": sum(
+                1 for h in hits if h.category.startswith("indirect:") and "pg-" not in h.category
+            ),
         }
         return result

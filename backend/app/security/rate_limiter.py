@@ -6,6 +6,7 @@
 
 内存存储，重启重置。单实例下足够；多实例需换 Redis。
 """
+
 from __future__ import annotations
 
 import logging
@@ -30,9 +31,7 @@ class RateLimiter:
 
     # ---- 限流（滑动窗口）----
 
-    def check_rate(
-        self, key: str, max_requests: int, window_sec: float = 60.0
-    ) -> tuple[bool, int]:
+    def check_rate(self, key: str, max_requests: int, window_sec: float = 60.0) -> tuple[bool, int]:
         """检查是否在限流窗口内允许通过。
 
         返回 (allowed, remaining)。
@@ -74,9 +73,7 @@ class RateLimiter:
             remaining = state["locked_until"] - time.monotonic()
             return max(0, int(remaining))
 
-    def record_failure(
-        self, key: str, max_fails: int, lockout_sec: float
-    ) -> bool:
+    def record_failure(self, key: str, max_fails: int, lockout_sec: float) -> bool:
         """记录一次认证失败。
 
         返回是否触发了锁定（达到 max_fails）。
@@ -88,7 +85,9 @@ class RateLimiter:
                 state["locked_until"] = time.monotonic() + lockout_sec
                 logger.warning(
                     "Brute-force lockout triggered: key=%s fails=%d lockout=%.0fs",
-                    key, state["fails"], lockout_sec,
+                    key,
+                    state["fails"],
+                    lockout_sec,
                 )
                 return True
             return False
@@ -104,10 +103,7 @@ class RateLimiter:
         """获取当前状态概览（用于调试/展示）。"""
         with self._lock:
             now = time.monotonic()
-            active_locks = sum(
-                1 for s in self._lock_counters.values()
-                if s["locked_until"] > now
-            )
+            active_locks = sum(1 for s in self._lock_counters.values() if s["locked_until"] > now)
             return {
                 "tracked_rate_keys": len(self._rate_counters),
                 "tracked_lock_keys": len(self._lock_counters),

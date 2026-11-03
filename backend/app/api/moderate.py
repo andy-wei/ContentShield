@@ -1,5 +1,6 @@
 """POST /v1/moderate：纯检测接口（外部 API，需 NHI 鉴权）。
 POST /api/moderate：纯检测接口（内部 UI 用，无需鉴权）。"""
+
 from __future__ import annotations
 
 import logging
@@ -39,11 +40,15 @@ async def moderate(
 
     身份通过 get_identity 解析（NHI 动态凭据管理），审计记录调用者。
     """
-    id_dict = {
-        "principal_id": identity.principal_id,
-        "subject": identity.subject,
-        "scopes": ",".join(identity.scopes),
-    } if identity else None
+    id_dict = (
+        {
+            "principal_id": identity.principal_id,
+            "subject": identity.subject,
+            "scopes": ",".join(identity.scopes),
+        }
+        if identity
+        else None
+    )
     return await _run_moderate(req, id_dict)
 
 
@@ -54,4 +59,6 @@ async def moderate_internal(req: ModerationRequest) -> ModerationResponse:
     用于检测台 Playground 的测试，不要求 NHI token。
     审计 subject 记录为 "ui-playground"。
     """
-    return await _run_moderate(req, {"principal_id": None, "subject": "ui-playground", "scopes": ""})
+    return await _run_moderate(
+        req, {"principal_id": None, "subject": "ui-playground", "scopes": ""}
+    )

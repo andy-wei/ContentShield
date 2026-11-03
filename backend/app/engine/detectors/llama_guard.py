@@ -7,6 +7,7 @@
 - https://www.llama.com/docs/model-cards-and-prompt-formats/llama-guard-4/
 - https://huggingface.co/meta-llama/Llama-Guard-4-12B
 """
+
 from __future__ import annotations
 
 import logging

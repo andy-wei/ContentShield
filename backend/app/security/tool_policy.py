@@ -6,6 +6,7 @@
 
 配合使用：白名单限制"能用什么"，黑名单拦截"绝对不能用什么"。
 """
+
 from __future__ import annotations
 
 import copy
@@ -73,7 +74,12 @@ def _summarize_arguments(args: str | dict, max_len: int = 200) -> str:
     # 简单脱敏：遮挡看起来像密钥/密码的值
     import re
 
-    args = re.sub(r'("(?:key|password|secret|token|api_key)"\s*:\s*")[^"]*(")', r"\1***\2", args, flags=re.IGNORECASE)
+    args = re.sub(
+        r'("(?:key|password|secret|token|api_key)"\s*:\s*")[^"]*(")',
+        r"\1***\2",
+        args,
+        flags=re.IGNORECASE,
+    )
     return args[:max_len]
 
 
@@ -94,7 +100,11 @@ def enforce_tool_whitelist(body: dict, allowed_tools: list[str]) -> tuple[dict, 
     if tools:
         kept = []
         for tool in tools:
-            name = tool.get("function", {}).get("name", "") if tool.get("type") == "function" else tool.get("name", "")
+            name = (
+                tool.get("function", {}).get("name", "")
+                if tool.get("type") == "function"
+                else tool.get("name", "")
+            )
             if name in allowed_tools:
                 kept.append(tool)
             else:
@@ -172,7 +182,11 @@ def extract_all_tool_calls(body: dict) -> list[dict]:
 
     # tools 声明（工具定义，也记录）
     for tool in body.get("tools", []):
-        name = tool.get("function", {}).get("name", "") if tool.get("type") == "function" else tool.get("name", "")
+        name = (
+            tool.get("function", {}).get("name", "")
+            if tool.get("type") == "function"
+            else tool.get("name", "")
+        )
         if name:
             calls.append(
                 {

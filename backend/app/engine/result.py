@@ -1,4 +1,5 @@
 """检测结果数据结构（detector 内部用，与 API 的 LayerResult 对应）。"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

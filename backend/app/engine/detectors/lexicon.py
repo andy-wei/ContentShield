@@ -4,6 +4,7 @@
 1. SQLite 中 LexiconEntry（UI 可编辑）
 2. 启动时载入内存，热更新通过 invalidate() 触发重载
 """
+
 from __future__ import annotations
 
 import logging
@@ -32,9 +33,7 @@ class LexiconDetector(BaseDetector):
 
     async def _load(self) -> None:
         async with async_session() as session:
-            res = await session.execute(
-                select(LexiconEntry).where(LexiconEntry.enabled.is_(True))
-            )
+            res = await session.execute(select(LexiconEntry).where(LexiconEntry.enabled.is_(True)))
             entries = res.scalars().all()
 
         terms: dict[str, dict] = {}

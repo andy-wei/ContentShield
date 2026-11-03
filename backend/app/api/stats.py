@@ -1,4 +1,5 @@
 """仪表盘统计：检测数、拦截率、趋势、类别分布。"""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -22,9 +23,7 @@ async def overview(
     since = datetime.utcnow() - timedelta(days=days)
 
     # 总数
-    total = await session.scalar(
-        select(func.count()).where(AuditLog.created_at >= since)
-    ) or 0
+    total = await session.scalar(select(func.count()).where(AuditLog.created_at >= since)) or 0
 
     # 各决策数
     dec_res = await session.execute(
@@ -94,9 +93,7 @@ async def category_distribution(
 ):
     """命中类别分布（Top N）。"""
     since = datetime.utcnow() - timedelta(days=days)
-    res = await session.execute(
-        select(AuditLog.categories).where(AuditLog.created_at >= since)
-    )
+    res = await session.execute(select(AuditLog.categories).where(AuditLog.created_at >= since))
     counts: dict[str, int] = {}
     for (cats,) in res.all():
         for c in cats or []:
@@ -112,9 +109,7 @@ async def layer_distribution(
 ):
     """各层命中分布。"""
     since = datetime.utcnow() - timedelta(days=days)
-    res = await session.execute(
-        select(AuditLog.layers).where(AuditLog.created_at >= since)
-    )
+    res = await session.execute(select(AuditLog.layers).where(AuditLog.created_at >= since))
     counts: dict[str, int] = {
         "lexicon": 0,
         "prompt_guard": 0,

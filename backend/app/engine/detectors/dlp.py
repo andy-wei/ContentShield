@@ -9,6 +9,7 @@
 - JWT
 - 中国身份证（18 位校验）、手机号、银行卡（Luhn）、邮箱
 """
+
 from __future__ import annotations
 
 import logging
@@ -143,6 +144,9 @@ def id_card_valid(cid: str) -> bool:
     """18 位身份证校验位校验。"""
     if len(cid) != 18:
         return False
+    # 前 17 位必须全为数字（末位可为 X）
+    if not cid[:17].isdigit():
+        return False
     factor = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2]
     check = ["1", "0", "X", "9", "8", "7", "6", "5", "4", "3", "2"]
     total = sum(int(cid[i]) * factor[i] for i in range(17))
@@ -159,9 +163,7 @@ class DlpDetector(BaseDetector):
 
     async def _load(self) -> None:
         async with async_session() as session:
-            res = await session.execute(
-                select(DlpRule).where(DlpRule.enabled.is_(True))
-            )
+            res = await session.execute(select(DlpRule).where(DlpRule.enabled.is_(True)))
             rules = res.scalars().all()
 
         compiled = []
@@ -264,7 +266,6 @@ class DlpDetector(BaseDetector):
             redacted = pattern.sub(_sub, redacted)
 
         return redacted, hits
-
 
     async def warmup(self) -> None:
         await self._load()

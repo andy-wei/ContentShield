@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# 同一分支的新推送取消旧的运行
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================
+  # 后端：ruff 静态检查 + pytest 单元测试
+  # ============================================================
+  backend:
+    name: Backend (ruff + pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install pytest-cov
+
+      - name: Ruff check
+        run: ruff check app/
+
+      - name: Ruff format check
+        run: ruff format app/ --check
+
+      - name: Pytest
+        env:
+          ENCRYPTION_KEY: ""
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+        run: pytest --cov=app.security --cov=app.services --cov=app.engine --cov-report=term-missing
+
+  # ============================================================
+  # 前端：eslint + tsc + vitest + 构建
+  # ============================================================
+  frontend:
+    name: Frontend (lint + tsc + vitest + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Vitest
+        run: npm run test
+
+      - name: Build
+        run: npm run build

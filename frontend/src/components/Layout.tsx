@@ -10,6 +10,12 @@ import {
   Network,
   KeyRound,
   Settings,
+  ShieldAlert,
+  ScanSearch,
+  Database,
+  Swords,
+  Package,
+  ClipboardCheck,
 } from 'lucide-react'
 import { useSettings } from '../store/settings'
 import { cn } from '../lib/format'
@@ -18,6 +24,12 @@ const navItems = [
   { to: '/', label: '仪表盘', icon: LayoutDashboard, end: true },
   { to: '/playground', label: '检测台', icon: FlaskConical },
   { to: '/rules', label: '策略配置', icon: SlidersHorizontal },
+  { to: '/threat-model', label: '威胁建模', icon: ShieldAlert },
+  { to: '/audit-checklist', label: '审计 Checklist', icon: ClipboardCheck },
+  { to: '/scan', label: '安全扫描', icon: ScanSearch },
+  { to: '/training', label: '训练数据', icon: Database },
+  { to: '/redteam', label: '红队测试', icon: Swords },
+  { to: '/mbom', label: '模型供应链', icon: Package },
   { to: '/audit', label: '审计日志', icon: ScrollText },
   { to: '/gateway', label: '网关配置', icon: Network },
   { to: '/identities', label: '身份管理', icon: KeyRound },

@@ -1,4 +1,5 @@
 """身份与凭据管理的 Pydantic 模型。"""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -6,8 +7,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 # ---- OAuth 2.0 端点 ----
+
 
 class TokenRequest(BaseModel):
     """OAuth 2.0 Client Credentials Grant 请求。"""
@@ -54,6 +55,7 @@ class IntrospectResponse(BaseModel):
 
 
 # ---- NHI 管理 ----
+
 
 class NhiPrincipalCreate(BaseModel):
     """创建 NHI 请求。"""

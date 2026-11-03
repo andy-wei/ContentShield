@@ -1,4 +1,5 @@
 """策略规则管理 API：类别开关、词库 CRUD、DLP 规则 CRUD。"""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -33,9 +34,7 @@ async def update_category(
     update: CategoryRuleUpdate,
     session: AsyncSession = Depends(get_session),
 ):
-    cat = await session.scalar(
-        select(CategoryRule).where(CategoryRule.code == code)
-    )
+    cat = await session.scalar(select(CategoryRule).where(CategoryRule.code == code))
     if not cat:
         raise HTTPException(status_code=404, detail="category not found")
     for k, v in update.model_dump(exclude_unset=True).items():

@@ -4,6 +4,7 @@
 - 客户端发送: {"text": "...", "source": "user_prompt"}
 - 服务端依次推送各层完成事件，最后推送 done
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -20,18 +21,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["websocket"])
 
 
-async def _detect_layer(
-    ws: WebSocket, detector: BaseDetector, text: str, source: str
-) -> dict:
+async def _detect_layer(ws: WebSocket, detector: BaseDetector, text: str, source: str) -> dict:
     """跑单层并推送进度。"""
     t0 = time.perf_counter()
     try:
         r = await detector.detect(text, source=source)
     except Exception as e:  # noqa: BLE001
         r = None
-        await ws.send_json(
-            {"event": "layer_error", "layer": detector.name, "error": str(e)}
-        )
+        await ws.send_json({"event": "layer_error", "layer": detector.name, "error": str(e)})
         return {"name": detector.name, "decision": "skipped", "hit": False, "details": {}}
     payload = r.to_dict()
     payload["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
@@ -61,9 +58,7 @@ async def ws_moderate(ws: WebSocket) -> None:
             t0 = time.perf_counter()
 
             # 并行跑四层，但每层完成即推送
-            tasks = [
-                _detect_layer(ws, d, text, source) for d in orchestrator.detectors
-            ]
+            tasks = [_detect_layer(ws, d, text, source) for d in orchestrator.detectors]
             layer_results = await asyncio.gather(*tasks)
 
             # 融合
@@ -81,9 +76,7 @@ async def ws_moderate(ws: WebSocket) -> None:
                 if not r.get("hit"):
                     continue
                 weight = LAYER_WEIGHTS.get(r["name"], 0.25)
-                layer_score = max(
-                    (h["score"] for h in r.get("hits", [])), default=0.5
-                )
+                layer_score = max((h["score"] for h in r.get("hits", [])), default=0.5)
                 risk += weight * layer_score
                 for h in r.get("hits", []):
                     categories.append(h["category"])

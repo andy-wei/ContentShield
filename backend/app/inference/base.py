@@ -5,6 +5,7 @@
   /v1/chat/completions 接口，因此适配器只需封装 HTTP 调用与鉴权差异。
 - Llama-Guard-4 与 Prompt Guard 2 复用同一个抽象，只是 endpoint 不同。
 """
+
 from __future__ import annotations
 
 import logging
@@ -88,9 +89,7 @@ class InferenceBackend(ABC):
         headers = self._auth_headers()
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(
-                    f"{self.base_url}/v1/models", headers=headers
-                )
+                resp = await client.get(f"{self.base_url}/v1/models", headers=headers)
                 ok = resp.status_code == 200
                 return {
                     "status": "ok" if ok else "error",
@@ -151,9 +150,7 @@ class _OpenAICompatibleBackend(InferenceBackend):
         return ChatResult(
             text=text or "",
             raw=data,
-            latency_ms=int(
-                data.get("usage", {}).get("total_latency_ms", 0) or 0
-            ),
+            latency_ms=int(data.get("usage", {}).get("total_latency_ms", 0) or 0),
         )
 
 

@@ -1,4 +1,5 @@
 """应用配置：从环境变量加载，所有项有合理默认值。"""
+
 from __future__ import annotations
 
 from functools import lru_cache
@@ -84,6 +85,12 @@ class Settings(BaseSettings):
 
     # ---- 数据库 ----
     database_url: str = "sqlite+aiosqlite:///./data/contentshield.db"
+
+    # ---- Celery / Redis（DevSecOps 扫描任务队列）----
+    # Redis 地址，同时作为 Celery broker + backend
+    redis_url: str = "redis://localhost:6379/0"
+    # 扫描任务超时（秒）
+    scan_task_timeout: int = 1800
 
     # ---- 路径 ----
     data_dir: str = "./data"

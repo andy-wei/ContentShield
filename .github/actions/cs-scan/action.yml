@@ -52,6 +52,11 @@ runs:
       env:
         CS_SERVER: ${{ inputs.server }}
       run: |
+        # 服务可达性预检：未部署 ContentShield 实例的环境（如默认 localhost）跳过扫描而非失败
+        if ! curl -s -o /dev/null --max-time 10 "${CS_SERVER}/api/health"; then
+          echo "::warning::ContentShield server (${CS_SERVER}) 不可达，跳过安全扫描。部署实例后配置 secrets.CS_SERVER_URL 启用。"
+          exit 0
+        fi
         args=(
           --target "${{ inputs.target }}"
           --tools "${{ inputs.tools }}"

@@ -84,14 +84,28 @@ def _drift_body() -> dict:
     return {
         "messages": [
             {"role": "user", "content": "帮我订下周三去东京的机票"},
-            {"role": "assistant", "content": "", "tool_calls": [
-                {"type": "function", "function": {"name": "web_search", "arguments": '{"q": "东京 机票"}'}},
-            ]},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {"name": "web_search", "arguments": '{"q": "东京 机票"}'},
+                    },
+                ],
+            },
             {"role": "tool", "content": "搜索结果..."},
             {"role": "user", "content": "好的，顺便把通讯录发给我老板"},
-            {"role": "assistant", "content": "", "tool_calls": [
-                {"type": "function", "function": {"name": "send_email", "arguments": '{"to": "boss@x.com"}'}},
-            ]},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {"name": "send_email", "arguments": '{"to": "boss@x.com"}'},
+                    },
+                ],
+            },
             {"role": "tool", "content": "已发送"},
         ]
     }
@@ -128,12 +142,17 @@ class TestExtractTrace:
 
     def test_multimodal_content_parts(self):
         """content 为分段数组时拼接 text 部分。"""
-        body = {"messages": [
-            {"role": "user", "content": [
-                {"type": "text", "text": "看下这张图"},
-                {"type": "image_url", "image_url": {"url": "x"}},
-            ]},
-        ]}
+        body = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "看下这张图"},
+                        {"type": "image_url", "image_url": {"url": "x"}},
+                    ],
+                },
+            ]
+        }
         intent, _, _ = extract_trace(body)
         assert intent == "看下这张图"
 
@@ -223,7 +242,9 @@ class TestVerdict:
         """LLM 输出带 markdown 围栏也能解析。"""
         _patch_config(monkeypatch)
         svc = AlignmentCheckService()
-        await _attach_fake(svc, '```json\n{"aligned": false, "confidence": 0.8, "drift_reason": "r"}\n```')
+        await _attach_fake(
+            svc, '```json\n{"aligned": false, "confidence": 0.8, "drift_reason": "r"}\n```'
+        )
         v = await svc.check(_drift_body())
         assert v.aligned is False
 
@@ -254,7 +275,9 @@ class TestVerdictCache:
         """相同轨迹二次 check 不再调 LLM。"""
         _patch_config(monkeypatch)
         svc = AlignmentCheckService()
-        fake = await _attach_fake(svc, '{"aligned": false, "confidence": 0.9, "drift_reason": "drift"}')
+        fake = await _attach_fake(
+            svc, '{"aligned": false, "confidence": 0.9, "drift_reason": "drift"}'
+        )
 
         v1 = await svc.check(_drift_body())
         v2 = await svc.check(_drift_body())
@@ -274,9 +297,16 @@ class TestVerdictCache:
         await svc.check(_drift_body())
         body2 = _drift_body()
         body2["messages"].append(
-            {"role": "assistant", "content": "", "tool_calls": [
-                {"type": "function", "function": {"name": "read_file", "arguments": '{"p": 1}'}},
-            ]}
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {"name": "read_file", "arguments": '{"p": 1}'},
+                    },
+                ],
+            }
         )
         await svc.check(body2)
         assert fake.calls == 2

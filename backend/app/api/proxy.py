@@ -306,7 +306,9 @@ async def _check_alignment(body: dict, identity=None) -> tuple[dict | None, str 
                 latest_calls.append(
                     {
                         "tool_name": fn.get("name", tc.get("name", "")),
-                        "arguments_summary": str(fn.get("arguments", tc.get("arguments", "")))[:200],
+                        "arguments_summary": str(fn.get("arguments", tc.get("arguments", "")))[
+                            :200
+                        ],
                         "source": "request",
                         "reason": f"alignment_drift: {reason}"[:256],
                     }

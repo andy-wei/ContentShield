@@ -120,7 +120,7 @@ def extract_trace(body: dict) -> tuple[str, list[str], list[str]]:
     latest: list[str] = []
     for msg in reversed(messages):
         if isinstance(msg, dict) and msg.get("role") == "assistant" and msg.get("tool_calls"):
-            latest = actions[len(actions) - len(msg["tool_calls"]):] if msg["tool_calls"] else []
+            latest = actions[len(actions) - len(msg["tool_calls"]) :] if msg["tool_calls"] else []
             break
 
     return intent[:INTENT_MAX_CHARS], actions[:MAX_ACTIONS], latest
@@ -165,7 +165,13 @@ class AlignmentCheckService:
         if not model:
             model = await config_service.get("cross_verify.model", default="gpt-4o-mini")
 
-        return {"enabled": enabled, "action": action, "base_url": base_url, "api_key": api_key, "model": model}
+        return {
+            "enabled": enabled,
+            "action": action,
+            "base_url": base_url,
+            "api_key": api_key,
+            "model": model,
+        }
 
     async def _ensure_backend(self, force: bool = False):
         """按需构建/重建 LLM backend（配置变更自动刷新）。"""
@@ -187,9 +193,7 @@ class AlignmentCheckService:
             model=cfg["model"],
             name="alignment-check",
         )
-        logger.info(
-            "AlignmentCheck backend (re)built: model=%s", cfg["model"]
-        )
+        logger.info("AlignmentCheck backend (re)built: model=%s", cfg["model"])
         return cfg
 
     def _parse_verdict_json(self, text: str) -> dict | None:
@@ -225,9 +229,7 @@ class AlignmentCheckService:
             return AlignmentVerdict(aligned=None)
 
         # 结论缓存：相同轨迹（意图+动作序列）5 分钟内直接复用
-        cache_key = hashlib.sha1(
-            f"{intent}|{'|'.join(actions)}".encode()
-        ).hexdigest()
+        cache_key = hashlib.sha1(f"{intent}|{'|'.join(actions)}".encode()).hexdigest()
         cached = self._cache.get(cache_key)
         if cached:
             ts, verdict = cached
@@ -248,9 +250,7 @@ class AlignmentCheckService:
         )
         prompt = prompt.replace(
             "{latest}",
-            "\n".join(
-                f"- {a}" for a in latest
-            ),
+            "\n".join(f"- {a}" for a in latest),
         )
 
         from ..inference.base import ChatMessage

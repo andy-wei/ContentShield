@@ -336,7 +336,9 @@ class AlignmentCheckConfig(BaseModel):
         "warn", description="判定漂移时的动作：warn 标记放行 / block 拦截"
     )
     base_url: str = Field("", description="OpenAI 兼容端点（留空=复用交叉验证）")
-    api_key: str = Field("", description="API Key（留空=不修改已有值；为空且交叉验证有 key 则复用）")
+    api_key: str = Field(
+        "", description="API Key（留空=不修改已有值；为空且交叉验证有 key 则复用）"
+    )
     model: str = Field("", description="模型名（留空=复用交叉验证）")
 
 
@@ -377,8 +379,10 @@ async def get_alignment_check_config():
     else:
         masked = ""
 
-    source = "自有配置" if (own_key or own_base) else (
-        "复用 L4 交叉验证模型配置" if cv_key else "未配置（检测将跳过）"
+    source = (
+        "自有配置"
+        if (own_key or own_base)
+        else ("复用 L4 交叉验证模型配置" if cv_key else "未配置（检测将跳过）")
     )
 
     return AlignmentCheckConfigRead(

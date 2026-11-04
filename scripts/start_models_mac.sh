@@ -87,7 +87,7 @@ if [[ $DAEMON -eq 1 ]]; then
 
   if [[ $PG_AVAILABLE -eq 1 ]]; then
     echo "🚀 启动 Prompt Guard 2 86M → http://localhost:8081"
-    echo "   模型: $PG_DIR（DeBERTa-v2，Python transformers + MPS）"
+    echo "   模型: ${PG_DIR}（DeBERTa-v2，Python transformers + MPS）"
     nohup python3 "$PROJECT_DIR/inference/prompt_guard_server.py" \
       --model "$PG_DIR" --port 8081 > /tmp/cs-pg.log 2>&1 &
     echo $! > /tmp/cs-pg.pid

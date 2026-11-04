@@ -47,7 +47,8 @@ class InferenceBackend(ABC):
         timeout: float = 60.0,
         name: str | None = None,
     ):
-        self.base_url = base_url.rstrip("/")
+        # 兼容两种写法：base_url 带或不带 /v1 后缀（chat() 会补 /v1/chat/completions）
+        self.base_url = base_url.rstrip("/").removesuffix("/v1")
         self.api_key = api_key
         self.model = model
         self.timeout = timeout

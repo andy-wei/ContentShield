@@ -47,7 +47,13 @@ jobs:
         env:
           ENCRYPTION_KEY: ""
           DATABASE_URL: "sqlite+aiosqlite:///:memory:"
-        run: pytest --cov=app.security --cov=app.services --cov=app.engine --cov-report=term-missing
+        run: |
+          set -o pipefail
+          pytest --cov=app.security --cov=app.services --cov=app.engine --cov-report=term-missing 2>&1 | tee /tmp/pytest.log || {
+            # 失败摘要写入 annotation（API/邮件可见，无需进网页翻日志）
+            echo "::error title=pytest-failed::$(grep -hE 'FAILED|ERROR collecting|^E ' /tmp/pytest.log | tail -8 | head -c 700 | tr '\n' ' | ')"
+            exit 1
+          }
 
   # ============================================================
   # 前端：eslint + tsc + vitest + 构建

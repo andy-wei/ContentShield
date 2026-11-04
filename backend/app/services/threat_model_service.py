@@ -44,7 +44,9 @@ LAYER_TO_AUDIT_KEY: dict[str, str] = {
     "prompt_guard": "prompt_guard",
     "llama_guard": "llama_guard",
     "dlp": "dlp",
+    "indirect_injection": "indirect_injection",
     "cross_verify": "cross_verify",
+    "code_shield": "code_shield",
 }
 
 

@@ -40,8 +40,11 @@ const REF_LAYER_LABEL: Record<string, string> = {
   prompt_guard: 'L1 注入检测',
   dlp: 'L3 DLP',
   llama_guard: 'L2 危害分类',
+  indirect_injection: 'L1.5 间接注入',
   tool_whitelist: '工具白名单',
   cross_verify: 'L4 交叉验证',
+  code_shield: 'L5 代码安全',
+  alignment_check: '行为对齐检测',
   rate_limiter: '限流',
   manual: '人工',
 }

@@ -115,6 +115,9 @@ async def layer_distribution(
         "prompt_guard": 0,
         "llama_guard": 0,
         "dlp": 0,
+        "indirect_injection": 0,
+        "cross_verify": 0,
+        "code_shield": 0,
     }
     for (layers,) in res.all():
         if not isinstance(layers, dict):

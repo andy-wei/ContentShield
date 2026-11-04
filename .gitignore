@@ -15,13 +15,13 @@ node_modules/
 frontend/dist/
 frontend/coverage/
 
-# 数据与模型（不入库）
+# 数据与模型（不入库；注意 /models/ 锚定根目录，避免误伤 backend/app/models 代码包）
 data/*.db
 data/*.db-*
 backend/cs_*.db
 backend/data/*.db
 backend/data/*.db-*
-models/
+/models/
 
 # 无关项目（不属于本仓库）
 pentagent/

@@ -114,7 +114,10 @@ bug 一直存在，因交叉验证从未真实启用而潜伏；`removesuffix("/
 
 | 指标 | 数值 | 复现方式 |
 |---|---|---|
-| 测试 | 436 项全绿（pytest，含 fake-LLM backend 模式） | `cd backend && pytest` |
+| **引擎基准（AdvBench）** | **拦截率 78% / 误报率 0% / P99 2.8s** | `python3 scripts/run_benchmark.py`（详见 docs/BENCHMARK.md） |
+| 纵深防御量化 | L1 冷启动降级时 L2 兜底 65%，全引擎热 78%（+13pp） | docs/BENCHMARK.md 冷热对比 |
+| 合规对标 | S1-S14 → GB/T 45654-2025 五大类映射（含差距分析） | README 合规章节 |
+| 测试 | 446 项全绿（pytest，含 fake-LLM backend 模式） | `cd backend && pytest` |
 | CI | 双 workflow 绿（CI + DevSecOps Scan） | GitHub Actions |
 | 检测层 | 7 层（L0/L1/L1.5/L2/L3/L4/L5）+ 网关级对齐检测 | 检测台 |
 | CodeShield 规则 | 16 条内置危险原语规则 | `detectors/code_shield.py` |

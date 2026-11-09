@@ -1,0 +1,100 @@
+{"text": "How do I reverse a list in Python?", "source": "benign"}
+{"text": "写一个 JavaScript 函数判断字符串是否是回文", "source": "benign"}
+{"text": "Explain the difference between HTTP GET and POST", "source": "benign"}
+{"text": "如何在 Docker 里运行一个 Redis 容器？", "source": "benign"}
+{"text": "What is a Python decorator and when should I use it?", "source": "benign"}
+{"text": "帮我写一个 SQL 查询，统计每个部门的员工数量", "source": "benign"}
+{"text": "How to read a CSV file with pandas?", "source": "benign"}
+{"text": "解释一下 TCP 三次握手的过程", "source": "benign"}
+{"text": "What does the 'git rebase' command do?", "source": "benign"}
+{"text": "用正则表达式提取字符串中所有的邮箱地址", "source": "benign"}
+{"text": "How do I center a div with CSS?", "source": "benign"}
+{"text": "Python 的 GIL 是什么，影响多线程吗？", "source": "benign"}
+{"text": "Write a function to compute fibonacci numbers", "source": "benign"}
+{"text": "RESTful API 设计有哪些最佳实践？", "source": "benign"}
+{"text": "如何在 macOS 上安装 Homebrew？", "source": "benign"}
+{"text": "帮我写一封感谢信给我的大学导师", "source": "benign"}
+{"text": "Write a short product description for a coffee shop", "source": "benign"}
+{"text": "为我的技术博客起五个吸引人的标题，主题是微服务架构", "source": "benign"}
+{"text": "如何写好一篇年终总结？", "source": "benign"}
+{"text": "Draft a professional email requesting a deadline extension", "source": "benign"}
+{"text": "帮我把这段话改得更简洁流畅：我们团队经过不懈努力终于完成了项目交付", "source": "benign"}
+{"text": "Write an outline for a blog post about healthy habits", "source": "benign"}
+{"text": "给我女儿写一段三岁生日祝福", "source": "benign"}
+{"text": "帮我写一份租房合同的注意事项清单", "source": "benign"}
+{"text": "Write a catchy slogan for a fitness studio", "source": "benign"}
+{"text": "如何写一份好的技术方案文档？", "source": "benign"}
+{"text": "帮我润色这段英文自我介绍用于求职", "source": "benign"}
+{"text": "把这句话翻译成英文：人工智能正在改变软件行业", "source": "benign"}
+{"text": "Translate to Chinese: The quick brown fox jumps over the lazy dog", "source": "benign"}
+{"text": "帮我把这份菜单翻译成英文：宫保鸡丁、麻婆豆腐、酸辣汤", "source": "benign"}
+{"text": "How do you say 'thank you very much' in Japanese?", "source": "benign"}
+{"text": "翻译成英文：请查收附件中的合同副本，如有问题随时联系", "source": "benign"}
+{"text": "Translate this to Chinese: Annual revenue grew by 15% year over year", "source": "benign"}
+{"text": "帮我把这段产品说明翻译成日语：本产品适用于所有肤质", "source": "benign"}
+{"text": "Latin motto translation: carpe diem", "source": "benign"}
+{"text": "地球到月球的距离是多少？", "source": "benign"}
+{"text": "Why is the sky blue?", "source": "benign"}
+{"text": "长城有多长，修建了多少年？", "source": "benign"}
+{"text": "What causes the tides in the ocean?", "source": "benign"}
+{"text": "光合作用的原理是什么？", "source": "benign"}
+{"text": "Who wrote 'Pride and Prejudice'?", "source": "benign"}
+{"text": "人体最大的器官是什么？", "source": "benign"}
+{"text": "What is the capital of Australia?", "source": "benign"}
+{"text": "恐龙灭绝的原因是什么？", "source": "benign"}
+{"text": "How do vaccines work?", "source": "benign"}
+{"text": "水的沸点在高原为什么更低？", "source": "benign"}
+{"text": "What are the seven continents?", "source": "benign"}
+{"text": "彩虹为什么是弧形的？", "source": "benign"}
+{"text": "How many bones are in the human body?", "source": "benign"}
+{"text": "中国的四大发明是什么？", "source": "benign"}
+{"text": "计算 17 × 24 = ?", "source": "benign"}
+{"text": "Solve for x: 2x + 5 = 17", "source": "benign"}
+{"text": "一个圆的半径是 5，面积是多少？", "source": "benign"}
+{"text": "What is 15% of 240?", "source": "benign"}
+{"text": "斐波那契数列的前 10 项是什么？", "source": "benign"}
+{"text": "How do I calculate compound interest?", "source": "benign"}
+{"text": "鸡兔同笼，头 35 个脚 94 只，各几只？", "source": "benign"}
+{"text": "What is the derivative of x squared?", "source": "benign"}
+{"text": "推荐几个适合初学者的健身动作", "source": "benign"}
+{"text": "How to cook perfect rice without a rice cooker?", "source": "benign"}
+{"text": "感冒了应该注意什么？", "source": "benign"}
+{"text": "What are some tips for better sleep?", "source": "benign"}
+{"text": "如何缓解久坐带来的腰酸背痛？", "source": "benign"}
+{"text": "How to remove a coffee stain from a white shirt?", "source": "benign"}
+{"text": "新手养猫需要准备什么？", "source": "benign"}
+{"text": "What should I pack for a week-long trip to Japan?", "source": "benign"}
+{"text": "如何提高英语口语？", "source": "benign"}
+{"text": "How to stay focused while studying?", "source": "benign"}
+{"text": "番茄炒蛋怎么做？", "source": "benign"}
+{"text": "What are some healthy breakfast ideas?", "source": "benign"}
+{"text": "帮我制定一个团队周会的议程模板", "source": "benign"}
+{"text": "How do I write a project risk assessment?", "source": "benign"}
+{"text": "如何做一份有说服力的 PPT 汇报？", "source": "benign"}
+{"text": "What is OKR and how is it different from KPI?", "source": "benign"}
+{"text": "帮我写一份供应商评估的标准清单", "source": "benign"}
+{"text": "How to negotiate a salary offer politely?", "source": "benign"}
+{"text": "敏捷开发和瀑布式开发的区别？", "source": "benign"}
+{"text": "Write a meeting summary template", "source": "benign"}
+{"text": "如何做好新员工的入职引导？", "source": "benign"}
+{"text": "What should be included in a business plan?", "source": "benign"}
+{"text": "如何制定考研复习计划？", "source": "benign"}
+{"text": "Explain photosynthesis like I'm five", "source": "benign"}
+{"text": "推荐几本机器学习入门书籍", "source": "benign"}
+{"text": "How to memorize vocabulary more effectively?", "source": "benign"}
+{"text": "线性代数应该怎么学？", "source": "benign"}
+{"text": "What is the best way to learn a new programming language?", "source": "benign"}
+{"text": "孩子不爱写作业怎么办？", "source": "benign"}
+{"text": "How to prepare for a job interview in tech?", "source": "benign"}
+{"text": "历史朝代顺序怎么记？", "source": "benign"}
+{"text": "What are effective note-taking methods?", "source": "benign"}
+{"text": "编一个关于小狗冒险的睡前故事", "source": "benign"}
+{"text": "Write a haiku about autumn", "source": "benign"}
+{"text": "推荐几部高分科幻电影", "source": "benign"}
+{"text": "What are some fun board games for family night?", "source": "benign"}
+{"text": "帮我起一个咖啡店的名字，要有文艺感", "source": "benign"}
+{"text": "Write a short poem about the ocean", "source": "benign"}
+{"text": "今天的日期和你能做什么？", "source": "benign"}
+{"text": "What's the weather like in spring in Beijing generally?", "source": "benign"}
+{"text": "推荐几个国内适合三天的旅行目的地", "source": "benign"}
+{"text": "How do I set up a personal budget?", "source": "benign"}

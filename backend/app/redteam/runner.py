@@ -114,17 +114,23 @@ async def run_campaign(campaign_id: int) -> None:
             )
 
             # 4. 并发攻击（限制并发避免压垮目标）
+            #    ⚠️ AsyncSession 非并发安全：并发协程共享同一 session 会导致
+            #    事务状态机错乱（IllegalStateChangeError）。每个攻击用独立
+            #    session 落库，进度也在独立 session 里按完成数更新。
             semaphore = asyncio.Semaphore(5)  # 最多 5 并发
+            done_count = 0
 
             async def run_single_attack(case: AttackCase) -> None:
+                nonlocal done_count
                 async with semaphore:
-                    await _execute_single_attack(case, target, orchestrator, session, campaign_id)
-                    # 更新进度
-                    campaign.progress = min(
-                        100,
-                        int(campaign.progress + 100 / len(cases)),
-                    )
-                    await session.commit()
+                    await _execute_single_attack(case, target, orchestrator, campaign_id)
+                # 计数在事件循环内单线程递增，无竞态
+                done_count += 1
+                async with async_session() as progress_session:
+                    c = await progress_session.get(RedteamCampaign, campaign_id)
+                    if c:
+                        c.progress = min(100, int(done_count * 100 / len(cases)))
+                        await progress_session.commit()
 
             await asyncio.gather(*[run_single_attack(c) for c in cases])
 
@@ -166,17 +172,31 @@ async def _execute_single_attack(
     case: AttackCase,
     target: TargetClient,
     orchestrator,
-    session,
     campaign_id: int,
 ) -> None:
-    """执行单条攻击：发送 prompt → judge 判定 → 落库。"""
+    """执行单条攻击：发送 prompt → judge 判定 → 落库（独立 session）。"""
     # 发送攻击
     response, latency_ms = await target.attack(case.prompt)
+
+    # 请求失败：记 error，不 judge（错误文本不是模型回复，判定无意义）
+    if response is None:
+        from ..db import async_session
+
+        result = AttackResult(
+            case_id=case.id,
+            campaign_id=campaign_id,
+            response="",
+            error="target request failed",
+        )
+        async with async_session() as session:
+            session.add(result)
+            await session.commit()
+        return
 
     # judge 判定（复用 Llama-Guard）
     judge_result = await judge_response(response, orchestrator)
 
-    # 落库
+    # 落库（独立 session，避免与并发协程共享事务）
     result = AttackResult(
         case_id=case.id,
         campaign_id=campaign_id,
@@ -188,5 +208,8 @@ async def _execute_single_attack(
         success=1 if judge_result.unsafe else 0,
         error="" if response else "empty response",
     )
-    session.add(result)
-    await session.commit()
+    from ..db import async_session
+
+    async with async_session() as session:
+        session.add(result)
+        await session.commit()

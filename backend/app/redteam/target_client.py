@@ -38,10 +38,11 @@ class TargetClient:
         self.temperature = temperature
         self.max_tokens = max_tokens
 
-    async def attack(self, prompt: str) -> tuple[str, int]:
+    async def attack(self, prompt: str) -> tuple[str | None, int]:
         """发送攻击 prompt，返回 (回复文本, 延迟毫秒)。
 
-        用单条 user 消息发送（最直接的攻击方式）。
+        请求失败返回 (None, 0)——错误信息由调用方记入 AttackResult.error，
+        不能以错误文本冒充模型回复（会被 judge 误判为"安全拒绝"污染统计与导出）。
         """
         try:
             result = await self.backend.chat(
@@ -52,7 +53,7 @@ class TargetClient:
             return result.text, result.latency_ms
         except Exception as e:  # noqa: BLE001
             logger.warning("目标模型请求失败: %s", e)
-            return f"[请求失败: {e}]", 0
+            return None, 0
 
     async def health(self) -> dict:
         """检查目标模型是否可达。"""

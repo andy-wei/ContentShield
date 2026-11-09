@@ -16,6 +16,7 @@ import {
   TrendingUp,
   AlertTriangle,
   CheckCircle2,
+  Download,
 } from 'lucide-react'
 import { api } from '../api/client'
 import type { Campaign, AttackResult } from '../api/types'
@@ -415,10 +416,23 @@ function CampaignRow({
 // ==================== 报告视图 ====================
 
 function CampaignReportView({ campaignId }: { campaignId: number }) {
+  const [exportHint, setExportHint] = useState('')
   const reportQuery = useQuery({
     queryKey: ['campaign-report', campaignId],
     queryFn: () => api.getCampaignReport(campaignId),
     enabled: !!campaignId,
+  })
+
+  const exportMut = useMutation({
+    mutationFn: (fmt: 'dpo' | 'sft') => api.exportRedteamTraining(campaignId, fmt),
+    onSuccess: (count, fmt) => {
+      setExportHint(
+        count > 0
+          ? `已导出 ${count} 条 ${fmt.toUpperCase()} 数据`
+          : '无可导出数据',
+      )
+      setTimeout(() => setExportHint(''), 3000)
+    },
   })
 
   if (reportQuery.isLoading) {
@@ -451,7 +465,39 @@ function CampaignReportView({ campaignId }: { campaignId: number }) {
   return (
     <div className="space-y-4">
       {/* ASR 概览 */}
-      <Card title="攻击成功率（ASR）">
+      <Card
+        title="攻击成功率（ASR）"
+        actions={
+          <div className="flex items-center gap-2">
+            {exportHint && (
+              <span className="text-xs text-emerald-600">{exportHint}</span>
+            )}
+            <button
+              onClick={() => exportMut.mutate('dpo')}
+              disabled={exportMut.isPending || report.campaign.success_count === 0}
+              title={
+                report.campaign.success_count === 0
+                  ? '无成功攻击，无可导出的 DPO 对'
+                  : '成功攻击 → DPO 偏好对（chosen=安全拒绝，rejected=真实屈服回复）'
+              }
+              className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Download size={12} /> 导出 DPO 对
+            </button>
+            <button
+              onClick={() => exportMut.mutate('sft')}
+              disabled={
+                exportMut.isPending ||
+                report.campaign.total_attacks - report.campaign.success_count === 0
+              }
+              title="失败攻击 → 真实安全回复 SFT 正例（可直接回传训练数据模块扫描）"
+              className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Download size={12} /> 导出 SFT 正例
+            </button>
+          </div>
+        }
+      >
         <div className="flex items-center gap-8">
           <div className="text-center">
             <div className={cn('text-4xl font-bold', asrColor)}>{asrPct}%</div>

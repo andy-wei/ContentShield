@@ -785,6 +785,24 @@ export const api = {
     )
     return data
   },
+  /** 导出红队训练数据（dpo 偏好对 / sft 正例）为 JSONL 文件下载。返回导出条数。 */
+  exportRedteamTraining: async (
+    campaignId: number,
+    fmt: 'dpo' | 'sft',
+  ): Promise<number> => {
+    const resp = await http.get(
+      `/api/redteam/campaigns/${campaignId}/export-training`,
+      { params: { fmt }, responseType: 'blob' },
+    )
+    const count = Number(resp.headers?.['x-record-count'] ?? 0)
+    const url = URL.createObjectURL(resp.data as Blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `redteam_${fmt}_${campaignId}.jsonl`
+    a.click()
+    URL.revokeObjectURL(url)
+    return count
+  },
 
   // ---- 模型供应链安全（MBOM）----
   listArtifacts: async (params?: {

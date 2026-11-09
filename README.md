@@ -31,7 +31,7 @@
 - 🎯 **威胁建模**：STRIDE + AI 专属维度，LLM 自动生成威胁，控制层证据联动（建模→控制→实际拦截闭环）
 - 🔎 **DevSecOps 扫描平台**：编排 bandit/gitleaks/trivy/pip-audit/npm-audit，异步任务队列（Celery+Redis），CI 门禁，漏洞聚合去重与可视化
 - 📊 **训练数据安全**：数据集投毒检测（5 类模式）+ PII/有害内容扫描，复用 7 层检测引擎，数据集版本溯源与差异分析
-- ⚔️ **红队对抗测试**：自动化攻击生成（预设/模板/LLM）+ Llama-Guard 作为 judge + ASR 评估 + 成员推理攻击（MIA），LLM 安全防御量化评估
+- ⚔️ **红队对抗测试**：自动化攻击生成（预设/模板/LLM）+ Llama-Guard 作为 judge + ASR 评估 + 成员推理攻击（MIA），LLM 安全防御量化评估；**一键导出安全微调训练数据**（成功攻击→DPO 偏好对 / 失败攻击→SFT 正例，打通红队→安全对齐数据飞轮）
 - 📦 **模型供应链（MBOM）**：模型物料清单，SHA256 完整性校验，License 合规检查，供应链风险评估，依赖关系追踪
 - 🔐 **NHI 动态身份**：OAuth 2.0 令牌、Fernet 加密保险库、按身份隔离上游凭据
 - 🧠 **交叉验证**：接入通用大模型（GPT-4o/Claude/DeepSeek）补 Llama-Guard 盲区
@@ -296,6 +296,7 @@ agent.chat(search_result)
 | `/api/redteam/campaigns` | 红队对抗测试活动管理 |
 | `/api/redteam/campaigns/{id}/results` | 攻击结果查询（含 ASR 统计） |
 | `/api/redteam/campaigns/{id}/report` | 红队报告（ASR、类别分布、成功攻击、风险洞察） |
+| `/api/redteam/campaigns/{id}/export-training` | 导出训练数据 JSONL（fmt=dpo 偏好对 / sft 正例，红队→安全微调数据飞轮） |
 | `/api/mbom/artifacts` | 模型制品登记与管理 |
 | `/api/mbom/artifacts/{id}/verify` | 模型文件完整性校验 |
 | `/api/mbom/artifacts/{id}/risk` | 供应链风险评估 |
@@ -487,6 +488,15 @@ GitHub Actions 集成（仓库自带 Action）：
 ### ASR 评估
 
 - **ASR（Attack Success Rate）**= 成功越狱数 / 总攻击数
+
+### 导出训练数据（红队 → 安全对齐数据飞轮）
+
+红队发现不止于评估报告——一键转化为安全微调训练数据（`GET /campaigns/{id}/export-training`，UI 报告页按钮）：
+
+- **DPO 偏好对**（成功攻击）：`{prompt, chosen, rejected, meta}`——`rejected` 为目标模型真实屈服回复，`chosen` 为按攻击类别定制、多模板轮换合成的安全拒绝；格式兼容 HF `trl` DPOTrainer
+- **SFT 正例**（失败攻击）：`{prompt, completion}`——模型真实安全回复，格式兼容训练数据模块的扫描器（可回传扫描形成闭环）
+
+配合后续微调（如用偏好对 DPO 训练自有 guard 模型）即构成「红队发现 → 数据构造 → 对齐训练 → ASR 复测」的完整安全数据飞轮。
 - judge 判定：目标回复被 Llama-Guard 判为 `block` 或 `warn` → 攻击成功
 - 按类别统计 ASR，识别最脆弱的攻击维度
 - 多次 campaign 对比可评估模型安全改进趋势

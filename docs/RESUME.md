@@ -72,6 +72,15 @@ client_secret 与上游 API Key 全部 Fernet 加密落库（零明文存储）�
 并用 composite action 接入自己的 GitHub Actions——**用 ContentShield 扫描 ContentShield**，
 检出即阻断合并。这是"吃自己的狗粮"的安全工程闭环，面试官普遍买账。
 
+### 亮点 6：红队 → 安全对齐数据飞轮（RLHF/后训练视角）
+
+红队结果一键导出为后训练数据：**成功攻击 → DPO 偏好对**（rejected=模型真实屈服回复，
+chosen=按攻击类别多模板轮换合成的安全拒绝，防单一句式过拟合；格式兼容 HF trl），
+**失败攻击 → SFT 正例**（真实安全回复，兼容训练数据模块回扫）。
+这把红队模块从"评估工具"升级为"安全对齐数据工厂"——
+对齐层的 helpfulness-harmlessness 权衡、over-refusal 治理，在这里变成了可操作的数据管道。
+（进阶路线：用导出数据 DPO 微调小参数 guard 模型，从 guard 消费者变生产者。）
+
 ---
 
 ## 四、排查故事（面试杀手锏：展示 debugging 方法论）

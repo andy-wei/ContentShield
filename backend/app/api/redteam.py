@@ -129,6 +129,34 @@ async def get_report(
     return report
 
 
+@router.get("/campaigns/{campaign_id}/export-training")
+async def export_training(
+    campaign_id: int,
+    fmt: str = Query("dpo", pattern="^(dpo|sft)$"),
+    category: str | None = Query(None),
+    session: AsyncSession = Depends(get_session),
+    _admin=Depends(get_admin_identity),
+):
+    """导出红队结果为训练数据 JSONL（红队 → 安全微调数据飞轮）。
+
+    fmt=dpo：成功攻击 → 偏好对（chosen=按类别合成的安全拒绝，rejected=真实屈服回复）
+    fmt=sft：失败攻击 → 真实安全回复正例（兼容训练数据模块的扫描格式）
+    """
+    from fastapi.responses import StreamingResponse
+
+    content, count = await redteam_service.export_training_data(
+        session, campaign_id, fmt=fmt, category=category
+    )
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/x-ndjson",
+        headers={
+            "Content-Disposition": f'attachment; filename="redteam_{fmt}_{campaign_id}.jsonl"',
+            "X-Record-Count": str(count),
+        },
+    )
+
+
 # ==================== 成员推理攻击（MIA）====================
 
 

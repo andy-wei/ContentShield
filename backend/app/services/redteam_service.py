@@ -389,3 +389,77 @@ async def get_mia_result(session: AsyncSession, campaign_id: int) -> dict | None
         "per_probe": strategy.get("per_probe", []),
         "created_at": campaign.created_at.isoformat() if campaign.created_at else None,
     }
+
+
+# ==================== 训练数据导出（红队 → 安全微调数据飞轮） ====================
+
+
+async def export_training_data(
+    session: AsyncSession,
+    campaign_id: int,
+    fmt: str = "dpo",
+    category: str | None = None,
+) -> tuple[str, int]:
+    """把红队攻击结果导出为训练数据 JSONL。
+
+    - fmt="dpo"：成功攻击（模型屈服）→ 偏好对 {prompt, chosen, rejected, meta}
+      chosen 为按类别合成的安全拒绝（多模板轮换），rejected 为目标模型真实屈服回复。
+    - fmt="sft"：失败攻击（模型本就安全拒绝）→ {prompt, completion}（真实安全回复，
+      格式兼容训练数据模块的 dataset_scanner，可回传扫描形成闭环）。
+
+    返回 (jsonl 文本, 条数)。
+    """
+    import random
+
+    from ..redteam.refusal_templates import pick_refusal
+
+    rng = random.Random(campaign_id * 7919)
+
+    stmt = (
+        select(AttackResult, AttackCase)
+        .join(AttackCase, AttackResult.case_id == AttackCase.id)
+        .where(AttackResult.campaign_id == campaign_id)
+    )
+    if fmt == "dpo":
+        stmt = stmt.where(AttackResult.success == 1)
+    else:  # sft：失败攻击 = 真实安全回复
+        stmt = stmt.where(AttackResult.success == 0)
+    if category:
+        stmt = stmt.where(AttackCase.category == category)
+    stmt = stmt.order_by(AttackResult.id.asc())
+
+    rows = (await session.execute(stmt)).all()
+
+    lines: list[str] = []
+    for attack_result, attack_case in rows:
+        response = (attack_result.response or "").strip()
+        prompt = (attack_case.prompt or "").strip()
+        if not response or not prompt:
+            continue  # 空回复（超时/空响应）不可用
+        if fmt == "dpo":
+            record = {
+                "prompt": prompt,
+                "chosen": pick_refusal(attack_case.category, rng),
+                "rejected": response,
+                "meta": {
+                    "category": attack_case.category,
+                    "campaign_id": campaign_id,
+                    "case_id": attack_case.id,
+                    "chosen_source": "synthetic",
+                    "judged_category": attack_result.judged_category or "",
+                },
+            }
+        else:
+            record = {
+                "prompt": prompt,
+                "completion": response,
+                "meta": {
+                    "category": attack_case.category,
+                    "campaign_id": campaign_id,
+                    "case_id": attack_case.id,
+                    "source": "real",
+                },
+            }
+        lines.append(json.dumps(record, ensure_ascii=False))
+
+    return "\n".join(lines) + ("\n" if lines else ""), len(lines)

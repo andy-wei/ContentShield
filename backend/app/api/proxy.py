@@ -233,6 +233,43 @@ async def _enforce_agent_security(body: dict, identity=None) -> dict | None:
     if removed:
         logger.info("Tools removed by whitelist: %s (allowed=%s)", removed, allowed_tools)
 
+    # ②.5 MCP 工具描述投毒检测（tools 声明的内容审核）
+    #     block 级投毒 → 拒绝整请求（工具定义被污染即会话不可信，fail-closed）
+    from ..security.mcp_guard import audit_tools, has_blocking_poison
+
+    poison_findings = audit_tools(body.get("tools", []))
+    if poison_findings:
+        await _record_actions(
+            [
+                {
+                    "tool_name": f["tool_name"] or "(unnamed)",
+                    "arguments_summary": f["evidence"][:200],
+                    "source": "tools_declared",
+                    "reason": f"mcp_poisoning: {f['pattern_name']} ({f['action']})"[:256],
+                }
+                for f in poison_findings
+            ],
+            principal_id,
+            subject,
+            request_id,
+            blocked=has_blocking_poison(poison_findings),
+        )
+        if has_blocking_poison(poison_findings):
+            worst = next(f for f in poison_findings if f["action"] == "block")
+            logger.warning(
+                "MCP tool poisoning BLOCKED: tool=%s pattern=%s by %s",
+                worst["tool_name"],
+                worst["pattern_name"],
+                subject,
+            )
+            return _refusal_response(
+                body.get("model", ""),
+                f"mcp_tool_poisoning: {worst['tool_name']} ({worst['pattern_name']})",
+            )
+        logger.warning(
+            "MCP tool poisoning WARN (allowed): %s", [f["pattern_name"] for f in poison_findings]
+        )
+
     # ③ 动作审计（记录所有 tool_calls）
     all_calls = extract_all_tool_calls(body)
     if all_calls:

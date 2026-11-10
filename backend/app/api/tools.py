@@ -77,3 +77,46 @@ async def moderate_tool_response(
     # 附带工具名（审计用）
     result["tool_name"] = req.tool_name
     return result
+
+
+# ==================== MCP 工具描述投毒审计 ====================
+
+
+class McpAuditRequest(BaseModel):
+    """MCP 工具列表审计请求（接入前逐工具体检）。"""
+
+    tools: list[dict] = Field(
+        ..., description="工具定义列表（OpenAI function 格式或 MCP 原生格式）"
+    )
+    skip_audit: bool = Field(True, description="跳过审计落库（默认跳过：审计探测场景高频调用）")
+
+
+@router.post("/v1/mcp/audit")
+async def audit_mcp_tools(
+    req: McpAuditRequest,
+    identity=Depends(get_identity),
+) -> dict:
+    """审计 MCP 工具定义列表，检测 description 投毒（tool poisoning）。
+
+    典型用法：Agent 平台在接入新 MCP Server 前，把其 tools 列表提交审计；
+    block 级发现表示工具描述含指令注入/数据外传/隐藏编码，不应接入。
+    网关侧（/v1/chat/completions）对请求内 tools 声明执行同样检测。
+    """
+    from ..security.mcp_guard import audit_tools, has_blocking_poison
+
+    if not isinstance(req.tools, list) or not req.tools:
+        raise HTTPException(status_code=400, detail="tools must be a non-empty list")
+
+    findings = audit_tools(req.tools)
+    blocking = [f for f in findings if f["action"] == "block"]
+    warnings = [f for f in findings if f["action"] == "warn"]
+    clean = len(req.tools) - len({f["tool_name"] for f in findings})
+
+    return {
+        "total_tools": len(req.tools),
+        "clean_tools": clean,
+        "decision": "block" if blocking else ("warn" if warnings else "pass"),
+        "blocking_findings": blocking,
+        "warnings": warnings,
+        "has_blocking_poison": has_blocking_poison(findings),
+    }

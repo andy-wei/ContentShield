@@ -18,7 +18,7 @@
 
 | 威胁类型 | 说明 | 防御层 |
 |---|---|---|
-| **复杂攻击** | 提示词注入、越狱、恶意代码生成、间接注入 | L1 Prompt Guard + L1.5 间接注入 + L2 Llama-Guard + L4 交叉验证 |
+| **复杂攻击** | 提示词注入、越狱、恶意代码生成、间接注入、MCP 工具描述投毒 | L1 Prompt Guard + L1.5 间接注入 + L2 Llama-Guard + L4 交叉验证 + MCP Guard |
 | **HAP** | 仇恨、滥用、脏话 | L0 词库 + L2 Llama-Guard + L4 交叉验证 |
 | **机密泄露** | PII、API Key、信用卡、身份证号 | L3 DLP（检测 + 动态脱敏） |
 | **危险代码** | LLM 生成/执行 eval、exec、反序列化、SSTI 等代码原语 | L5 CodeShield（静态审计，灵感来自 Meta LlamaFirewall） |
@@ -27,7 +27,7 @@
 
 - 🔍 **7 层纵深防御**：词库 → 注入检测 → 间接注入 → 危害分类 → DLP 防泄露 → 交叉验证 → 代码安全审计
 - 🛡️ **AI 网关代理**：OpenAI 兼容，双向拦截（输入 + 输出），自动脱敏改写
-- 🤖 **Agent 运行时安全**：工具白名单过滤、危险动作拦截、全量工具调用审计、**行为对齐检测**（AlignmentCheck：无状态轨迹重建 + LLM 判定目标漂移/劫持，灵感来自 Meta LlamaFirewall，判定模型复用 L4 交叉验证配置）
+- 🤖 **Agent 运行时安全**：工具白名单过滤、危险动作拦截、全量工具调用审计、**行为对齐检测**（AlignmentCheck：无状态轨迹重建 + LLM 判定目标漂移/劫持，灵感来自 Meta LlamaFirewall，判定模型复用 L4 交叉验证配置）、**MCP 工具描述投毒检测**（12 条规则五组：指令覆盖/数据外传/隐藏指令/防护绕过/Prompt 提取；网关内联拦截 + `POST /v1/mcp/audit` 接入前体检，兼容 OpenAI/MCP 双格式）
 - 🎯 **威胁建模**：STRIDE + AI 专属维度，LLM 自动生成威胁，控制层证据联动（建模→控制→实际拦截闭环）
 - 🔎 **DevSecOps 扫描平台**：编排 bandit/gitleaks/trivy/pip-audit/npm-audit，异步任务队列（Celery+Redis），CI 门禁，漏洞聚合去重与可视化
 - 📊 **训练数据安全**：数据集投毒检测（5 类模式）+ PII/有害内容扫描，复用 7 层检测引擎，数据集版本溯源与差异分析
@@ -283,6 +283,7 @@ agent.chat(search_result)
 | `/v1/chat/completions` | POST | NHI Token | **AI 网关代理**（透明转发 + 双向审核） |
 | `/v1/moderate` | POST | NHI Token | 纯检测（不转发） |
 | `/v1/tools/moderate` | POST | NHI Token | 工具响应检测（防间接注入） |
+| `/v1/mcp/audit` | POST | NHI Token | MCP 工具描述投毒审计（接入前逐工具体检） |
 | `/api/moderate` | POST | 无 | UI 检测台用（内部） |
 
 ### OAuth / 身份

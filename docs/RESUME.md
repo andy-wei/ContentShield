@@ -72,14 +72,16 @@ client_secret 与上游 API Key 全部 Fernet 加密落库（零明文存储）�
 并用 composite action 接入自己的 GitHub Actions——**用 ContentShield 扫描 ContentShield**，
 检出即阻断合并。这是"吃自己的狗粮"的安全工程闭环，面试官普遍买账。
 
-### 亮点 6：红队 → 安全对齐数据飞轮（RLHF/后训练视角）
+### 亮点 6：红队 → 安全对齐数据飞轮 + 自训 Guard 模型（后训练实战）
 
 红队结果一键导出为后训练数据：**成功攻击 → DPO 偏好对**（rejected=模型真实屈服回复，
-chosen=按攻击类别多模板轮换合成的安全拒绝，防单一句式过拟合；格式兼容 HF trl），
-**失败攻击 → SFT 正例**（真实安全回复，兼容训练数据模块回扫）。
-这把红队模块从"评估工具"升级为"安全对齐数据工厂"——
-对齐层的 helpfulness-harmlessness 权衡、over-refusal 治理，在这里变成了可操作的数据管道。
-（进阶路线：用导出数据 DPO 微调小参数 guard 模型，从 guard 消费者变生产者。）
+chosen=按攻击类别多模板轮换合成的安全拒绝；格式兼容 HF trl），
+**失败攻击 → SFT 正例**。并**完成飞轮闭环**：用 489 条三分类数据（AdvBench +
+手写中文越狱库 + 注入模式×载体参数化生成 + MCP 投毒样本）LoRA 微调 Qwen3-1.7B
+训练自有注入检测 guard——**中文注入召回 100% vs 生产基线 Prompt Guard 2 的 62%**，
+总准确率 97.9% vs 50%；训练成本 4 分钟/峰值 3.5GB（Apple Silicon MLX）。
+含诚实局限分析（同分布偏置/延迟权衡）与一键复现（docs/GUARD_TRAINING.md）。
+这正是"guard 模型从部署者到生产者"的完整故事。
 
 ---
 
@@ -114,6 +116,7 @@ bug 一直存在，因交叉验证从未真实启用而潜伏；`removesuffix("/
 
 | 指标 | 数值 | 复现方式 |
 |---|---|---|
+| **自训 Guard vs 基线** | **97.9% vs 50% 准确率；中文注入召回 100% vs 62%** | `scripts/build_guard_dataset.py && train_guard_sft.sh && eval_guard.py`（详见 docs/GUARD_TRAINING.md） |
 | **引擎基准（AdvBench）** | **拦截率 78% / 误报率 0% / P99 2.8s** | `python3 scripts/run_benchmark.py`（详见 docs/BENCHMARK.md） |
 | 纵深防御量化 | L1 冷启动降级时 L2 兜底 65%，全引擎热 78%（+13pp） | docs/BENCHMARK.md 冷热对比 |
 | 合规对标 | S1-S14 → GB/T 45654-2025 五大类映射（含差距分析） | README 合规章节 |

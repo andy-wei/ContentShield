@@ -1,0 +1,46 @@
+{
+  "val_size": 48,
+  "timestamp": "2026-11-11T14:42:00",
+  "custom_guard": {
+    "accuracy": 0.9792,
+    "per_class": {
+      "BENIGN": {
+        "precision": 0.917,
+        "recall": 1.0,
+        "f1": 0.957
+      },
+      "INJECTION": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "JAILBREAK": {
+        "precision": 1.0,
+        "recall": 0.938,
+        "f1": 0.968
+      }
+    },
+    "eval_seconds": 19
+  },
+  "prompt_guard_2": {
+    "accuracy": 0.5,
+    "per_class": {
+      "BENIGN": {
+        "precision": 0.379,
+        "recall": 1.0,
+        "f1": 0.55
+      },
+      "INJECTION": {
+        "precision": 0.684,
+        "recall": 0.619,
+        "f1": 0.65
+      },
+      "JAILBREAK": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      }
+    },
+    "eval_seconds": 1
+  }
+}

@@ -122,6 +122,17 @@
 
 完整方法、命中分布、漏网样本分析、冷热引擎对比与复现命令见 [docs/BENCHMARK.md](docs/BENCHMARK.md)（`python3 scripts/run_benchmark.py` 一键复测）。
 
+### 自训 Guard 模型（红队数据飞轮闭环）
+
+用红队/基准数据 LoRA 微调 Qwen3-1.7B 训练自己的注入检测 guard（**从 guard 部署者到生产者**）：
+
+| 模型 | Accuracy | INJECTION F1 | 中文注入召回 |
+|---|---|---|---|
+| **自训 Guard（Qwen3-1.7B + LoRA，489 样本/4 分钟训练）** | **97.9%** | **1.00** | **100%** |
+| Prompt Guard 2 86M（生产基线） | 50.0% | 0.65 | 62% |
+
+含诚实局限（同分布偏置/小验证集/延迟权衡）与全流程复现脚本，见 [docs/GUARD_TRAINING.md](docs/GUARD_TRAINING.md)。
+
 ---
 
 ## 🚀 快速开始
